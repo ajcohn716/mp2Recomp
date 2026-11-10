@@ -221,8 +221,7 @@ struct Steam final : Transport {
         }
     }
     void poll() override {
-        SteamAPI_RunCallbacks();
-        current=this;api->RunCallbacks();current=nullptr;
+        current=this;SteamAPI_RunCallbacks();api->RunCallbacks();current=nullptr;
         for(auto& [id,socket]:peers) {
             if(socket->pending_close&&socket->on_close){socket->pending_close=false;socket->on_close();}
             if(socket->on_message)while(!socket->received.empty()) {

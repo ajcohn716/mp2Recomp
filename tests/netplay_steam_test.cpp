@@ -39,6 +39,30 @@ int main() try {
         }
         room.social_event={};
         require(room.listen("",0,[](auto){})==1,"Steam listener creation failed");
+        // General Steam callbacks also dispatch networking events. Exercise a
+        // real connection state transition, not just already-connected pairs.
+        room.stop_listening();
+        auto listen_options=room.connection_options();
+        SteamNetworkingIPAddr local;
+        for(uint16_t port=17788;port<17820&&!room.listener;++port) {
+            local.SetIPv4(0x7f000001,port);
+            room.listener=room.api->CreateListenSocketIP(local,int(listen_options.size()),listen_options.data());
+        }
+        require(room.listener!=0,"Steam loopback listener failed");
+        require(room.api->GetListenSocketAddress(room.listener,&local),"Missing loopback address");
+        std::shared_ptr<SteamSocket> incoming;
+        room.accept=[&](auto socket){incoming=std::static_pointer_cast<SteamSocket>(socket);};
+        auto outgoing=std::static_pointer_cast<SteamSocket>(room.socket());
+        outgoing->handle=room.api->ConnectByIPAddress(local,int(listen_options.size()),listen_options.data());
+        require(outgoing->handle!=0,"Steam loopback connect failed");
+        room.peers.emplace(outgoing->handle,outgoing);
+        require(room.api->SetConnectionPollGroup(outgoing->handle,room.group),"Loopback receive group failed");
+        auto connect_deadline=std::chrono::steady_clock::now()+15s;
+        while((!incoming||!incoming->is_open()||!outgoing->is_open())&&std::chrono::steady_clock::now()<connect_deadline) {
+            room.poll();std::this_thread::sleep_for(1ms);
+        }
+        require(incoming&&incoming->is_open()&&outgoing->is_open(),"Steam connection callbacks lost during general callback dispatch");
+        incoming->reset_callbacks();outgoing->reset_callbacks();incoming->close();outgoing->close();room.stop_listening();
         auto first=std::static_pointer_cast<SteamSocket>(room.socket());
         auto second=std::static_pointer_cast<SteamSocket>(room.socket());
         require(room.api->CreateSocketPair(&first->handle,&second->handle,true,nullptr,nullptr),"Steam UDP socket pair failed");
@@ -75,6 +99,6 @@ int main() try {
         first->reset_callbacks();second->reset_callbacks();first->close();second->close();
         require(!first->is_open()&&!second->is_open(),"Steam close failed");
     }
-    std::cout<<"PASS: real Steam App ID 480, Spacewar friend filter, private invite lobby, P2P listener, encrypted UDP loopback, reliable text/binary ordering, bounds, shutdown/reinitialize\n";
+    std::cout<<"PASS: real Steam App ID 480, Spacewar friend filter, private invite lobby, P2P listener, connection callbacks, encrypted UDP loopback, reliable text/binary ordering, bounds, shutdown/reinitialize\n";
     return 0;
 } catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}

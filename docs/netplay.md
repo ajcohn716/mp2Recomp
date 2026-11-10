@@ -254,7 +254,8 @@ host-only controls, in-game acceptance, dismissal, invalid replies and retries.
 `netplay_steam_test` requires a running, signed-in Steam client. It exercises the
 real Steam API under App ID 480, checks the Spacewar friend filter, creates and
 clears a private invitation lobby, creates a P2P listener and encrypted UDP loopback
-pair, checks reliable text/binary ordering and bounds, and shuts down/reinitializes
+pair, verifies connection-state callbacks through a real local UDP connection,
+checks reliable text/binary ordering and bounds, and shuts down/reinitializes
 the API. It does not use a mock SDK. It does **not** simulate multiple Steam users
 or prove that a remote relay connection works.
 
