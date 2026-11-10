@@ -58,7 +58,8 @@ def main():
     env['PATH']=str(args.toolchain/'bin')+os.pathsep+env.get('PATH','')
     env['CMAKE_PREFIX_PATH']=str(args.toolchain)
     env['CONDA_PREFIX']=str(args.toolchain)
-    env['PKG_CONFIG_PATH']=str(args.toolchain/'lib/pkgconfig')
+    env['PKG_CONFIG_PATH']=os.pathsep.join([str(args.toolchain/'lib/pkgconfig'),str(args.toolchain/'share/pkgconfig')])
+    if not windows:env['PKG_CONFIG']=str(args.toolchain/'bin/pkg-config.bin')
     env['PKG_CONFIG_LIBDIR']=env['PKG_CONFIG_PATH']
     if not windows:env['LD_LIBRARY_PATH']=str(args.toolchain/'lib')
     build=ROOT/'build/sdk-tools'

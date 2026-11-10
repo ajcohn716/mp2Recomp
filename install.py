@@ -223,6 +223,9 @@ class Installer:
                 self.status('Installing runtime libraries')
                 library_dir=prefix if os.name=='nt' else prefix/'lib'
                 library_dir.mkdir(exist_ok=True)
+                if os.name!='nt':
+                    pulse=sdk/'toolchain/lib/pulseaudio'
+                    if pulse.is_dir():shutil.copytree(pulse,library_dir/'pulseaudio',dirs_exist_ok=True)
                 pattern='*.dll' if os.name=='nt' else '*.so*'
                 search=[sdk/'toolchain'/('bin' if os.name=='nt' else 'lib'),source/'rt64/src/contrib/dxc'/('bin/x64' if os.name=='nt' else 'lib/x64')]
                 if os.name=='nt':search+=[sdk/'python']
