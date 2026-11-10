@@ -1,0 +1,31 @@
+cmake_minimum_required(VERSION 3.24)
+project(MP2SteamHelper LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(Threads REQUIRED)
+set(MP2_STEAMWORKS_SDK "" CACHE PATH "Private build-only Steamworks SDK")
+if(NOT EXISTS "${MP2_STEAMWORKS_SDK}/public/steam/steam_api.h")
+    message(FATAL_ERROR "Provide MP2_STEAMWORKS_SDK to build the standalone Steam helper")
+endif()
+if(WIN32)
+    set(MP2_STEAM_RUNTIME "${MP2_STEAMWORKS_SDK}/redistributable_bin/win64/steam_api64.dll")
+else()
+    set(MP2_STEAM_RUNTIME "${MP2_STEAMWORKS_SDK}/redistributable_bin/linux64/libsteam_api.so")
+endif()
+add_library(mp2_steam_api SHARED IMPORTED GLOBAL)
+set_target_properties(mp2_steam_api PROPERTIES IMPORTED_LOCATION "${MP2_STEAM_RUNTIME}")
+if(WIN32)
+    set_target_properties(mp2_steam_api PROPERTIES IMPORTED_IMPLIB "${MP2_STEAMWORKS_SDK}/redistributable_bin/win64/steam_api64.lib")
+endif()
+add_executable(mp2recomp-steam-helper ../src/steam_helper_main.cpp ../src/netplay_steam.cpp)
+target_include_directories(mp2recomp-steam-helper PRIVATE ../src "${MP2_STEAMWORKS_SDK}/public")
+target_compile_definitions(mp2recomp-steam-helper PRIVATE MP2_HAS_STEAMWORKS)
+target_link_libraries(mp2recomp-steam-helper PRIVATE mp2_steam_api Threads::Threads)
+set_target_properties(mp2recomp-steam-helper PROPERTIES BUILD_RPATH "$ORIGIN;$ORIGIN/lib")
+add_custom_command(TARGET mp2recomp-steam-helper POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${MP2_STEAM_RUNTIME}" "$<TARGET_FILE_DIR:mp2recomp-steam-helper>")
+add_custom_command(TARGET mp2recomp-steam-helper POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:mp2recomp-steam-helper>/bundle"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:mp2recomp-steam-helper>" "${MP2_STEAM_RUNTIME}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE-STEAM-HELPER" "${CMAKE_CURRENT_SOURCE_DIR}/STEAMWORKS-NOTICE.txt"
+    "$<TARGET_FILE_DIR:mp2recomp-steam-helper>/bundle")

@@ -8,6 +8,13 @@ import sys
 ALLOWED = {
     "AGENTS.md",
     "LICENSE",
+    "LICENSE-STEAM-HELPER",
+    "steam-helper/CMakeLists.txt",
+    "steam-helper/STEAMWORKS-NOTICE.txt",
+    "src/netplay_steam_proxy.cpp",
+    "src/steam_helper_protocol.hpp",
+    "src/steam_helper_process.hpp",
+    "src/steam_helper_main.cpp",
     "THIRD_PARTY_NOTICES.md",
     "docs/releases/v0.1.md",
     "docs/releases/v0.1.1.md",

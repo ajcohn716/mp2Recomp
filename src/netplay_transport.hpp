@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Andrew Cohn
 #pragma once
 #include <cstddef>
 #include <cstdint>

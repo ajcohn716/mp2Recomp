@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Andrew Cohn
 // Include the adapter to exercise its socket implementation without exporting
 // test-only hooks in the production transport interface. Uses the real SDK and
 // Steam client, with encrypted UDP loopback, not a mock Steam implementation.

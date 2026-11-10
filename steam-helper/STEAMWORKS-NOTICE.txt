@@ -1,0 +1,19 @@
+This distribution contains Valve Corporation's Steamworks API runtime:
+steam_api64.dll (Windows x86-64) or libsteam_api.so (Linux x86-64).
+Copyright Valve Corporation. All rights reserved.
+
+These proprietary files are distributed as SDK Redistributables with the
+standalone mp2recomp-steam-helper application under section 1.1(b) of the
+Steamworks SDK Access Agreement:
+https://partner.steamgames.com/documentation/sdk_access_agreement/
+
+The full SDK and its headers are not included. Valve's binaries are not
+licensed under this project's GPL or MIT licenses. The helper's authored
+source is MIT-licensed; see LICENSE-STEAM-HELPER.
+
+The helper is an independent networking process using a generic framed stream
+protocol. It does not link the game, ROM-derived code, N64ModernRuntime, or
+other GPL components. The GPL game communicates with it through process pipes.
+
+Steam must be installed, running, and signed in. This alpha integration uses
+the Spacewar test App ID 480. No Valve sponsorship or endorsement is implied.
