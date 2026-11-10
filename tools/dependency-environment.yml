@@ -4,6 +4,7 @@ channels:
 dependencies:
   - python=3.12
   - pip
+  - setuptools<81
   - clang=21
   - clangxx=21
   - lld=21

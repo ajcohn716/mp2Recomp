@@ -54,7 +54,9 @@ def main():
     env['PATH']=str(args.toolchain/'bin')+os.pathsep+env.get('PATH','')
     build=ROOT/'build/sdk-tools'
     compiler_flags=[]
-    if not windows:
+    if windows:
+        compiler_flags=['-DCMAKE_CXX_FLAGS=-include cstdlib']
+    else:
         sysroot=args.toolchain/'x86_64-conda-linux-gnu/sysroot'
         flags='--gcc-toolchain='+str(args.toolchain)+' --sysroot='+str(sysroot)
         compiler_flags=['-DCMAKE_C_FLAGS='+flags,'-DCMAKE_CXX_FLAGS='+flags]

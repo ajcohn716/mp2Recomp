@@ -21,6 +21,7 @@ set(RT64_SDL_WINDOW_VULKAN ON CACHE BOOL "" FORCE)
 add_subdirectory(rt64)
 add_subdirectory(runtime)
 if(MINGW)
+    target_compile_options(rabbitizer PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-include;cstdlib>")
     include(cmake/MinGWCompat.cmake)
     target_include_directories(plume BEFORE PUBLIC
         ${CMAKE_SOURCE_DIR}/directx-headers/include
