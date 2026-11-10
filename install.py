@@ -251,6 +251,20 @@ class Installer:
             self.status('Installed. Ready to play.')
         return launcher_path
 
+def launch_game(launcher):
+    env=dict(os.environ)
+    if getattr(sys,'frozen',False):
+        if os.name=='nt':
+            import ctypes
+            buffer=ctypes.create_unicode_buffer(32768)
+            ctypes.windll.kernel32.GetDllDirectoryW(len(buffer),buffer)
+            ctypes.windll.kernel32.SetDllDirectoryW(None)
+            try:return subprocess.Popen([str(launcher)],env=env,start_new_session=True)
+            finally:ctypes.windll.kernel32.SetDllDirectoryW(buffer.value)
+        if 'LD_LIBRARY_PATH_ORIG' in env:env['LD_LIBRARY_PATH']=env['LD_LIBRARY_PATH_ORIG']
+        else:env.pop('LD_LIBRARY_PATH',None)
+    return subprocess.Popen([str(launcher)],env=env,start_new_session=True)
+
 def default_prefix():
     if os.name=='nt':return Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'mp2recomp'
     return Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))/'mp2recomp'
@@ -288,7 +302,7 @@ def main(argv=None):
     try:
         launcher=installer.install(args.rom,args.prefix,args.build_dir,args.jobs,not args.no_desktop,dependency_pack=args.dependency_pack,sdk_dir=args.sdk_dir,source_build=args.source_build)
         print('Launcher: '+str(launcher))
-        if args.launch:subprocess.Popen([str(launcher)],start_new_session=True)
+        if args.launch:launch_game(launcher)
         return 0
     except KeyboardInterrupt:
         installer.cancel();print('Installation cancelled.',file=sys.stderr);return 130

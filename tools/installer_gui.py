@@ -1,11 +1,10 @@
 """Cross-platform Qt frontend. No game assets or ROM contents are embedded."""
 from pathlib import Path
-import subprocess
 import threading
 from PySide6.QtCore import QObject, Signal, QTimer, Qt, QUrl
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,
     QFrame,QLineEdit,QPushButton,QFileDialog,QSpinBox,QCheckBox,QPlainTextEdit,QProgressBar,QGroupBox)
-from install import Installer
+from install import Installer, launch_game
 
 def local_drop_path(urls):
     if len(urls)!=1 or not urls[0].isLocalFile():return None
@@ -91,7 +90,7 @@ class Window(QMainWindow):
         else:
             self.status.setText('Installed. Ready to play.')
             if self.launch.isChecked() and not self.close_when_done:
-                try:subprocess.Popen([str(launcher)],start_new_session=True)
+                try:launch_game(launcher)
                 except OSError as exc:self.status.setText('Installed, but could not launch: '+str(exc))
         if self.close_when_done:self.close()
 
