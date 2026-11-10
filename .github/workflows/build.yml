@@ -34,7 +34,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cmake -S . -B build/check -G Ninja -DMP2_PORTABILITY_CHECK=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-          cmake --build build/check --target mp2recomp -j 3
+          cmake --build build/check --target mp2recomp -j 3 -- -k 0
           ./build/check/mp2recomp.exe --self-test
       - name: Installer and GUI checks
         run: |

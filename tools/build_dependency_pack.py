@@ -71,7 +71,7 @@ def main():
         compiler_flags=['-DCMAKE_C_FLAGS='+flags,'-DCMAKE_CXX_FLAGS='+flags]
     cmake=str(args.toolchain/('bin/cmake'+suffix))
     subprocess.run([cmake,'--fresh','-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
-    subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'--build',str(build),'--target','N64RecompCLI','RSPRecomp','-j',args.jobs],env=env,check=True)
+    subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'--build',str(build),'--target','N64RecompCLI','RSPRecomp','-j',args.jobs,'--','-k','0'],env=env,check=True)
     (stage/'tools').mkdir(exist_ok=True)
     for tool in ('N64Recomp','RSPRecomp'):
         destination=stage/'tools'/(tool+suffix);shutil.copy2(build/(tool+suffix),destination)
@@ -82,7 +82,7 @@ def main():
     subprocess.run([cmake,'--fresh','-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
         '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
-    subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','-j',args.jobs],env=env,check=True)
+    subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','-j',args.jobs,'--','-k','0'],env=env,check=True)
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
     for path in stage.rglob('*'):
         if path.is_file() and path.suffix.lower() in ('.z64','.v64','.n64'):raise SystemExit('ROM-like file rejected: '+str(path))
