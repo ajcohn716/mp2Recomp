@@ -251,7 +251,11 @@ class InstallerTests(unittest.TestCase):
         metadata={'format':1,'recipe':recipe_digest(project),'libraries':libraries}
         (runtime/'runtime.json').write_text(json.dumps(metadata))
         (sdk/'sdk.json').write_text(json.dumps({'format':1,'platform':platform_key(),
-            'tools':tools,'prebuilt_runtime':'runtime'}))
+            'tools':tools,'prebuilt_runtime':'runtime','steam_helper':'steam'}))
+        from tools.steam_sdk import bundle_names,pack_helper,install_helper
+        steam=sdk/'steam';steam.mkdir()
+        for name in bundle_names(platform_key()):(steam/name).write_bytes(b'synthetic standalone helper file')
+        pack_helper(project,steam,platform_key())
         commands=[]
         def run(command,cwd,env=None):
             commands.append(command)
@@ -265,6 +269,10 @@ class InstallerTests(unittest.TestCase):
             prefix=self.root/'installed'
             engine.install(self.rom,prefix,self.root/'build',desktop=False)
             self.assertTrue(any('-DMP2_PREBUILT_RUNTIME='+str(runtime) in cmd for cmd in commands))
+            self.assertTrue(any('-DMP2_STEAM_HELPER_DIR='+str(steam) in cmd for cmd in commands))
+            install_helper(sdk,prefix,project)
+            for name in bundle_names(platform_key()):self.assertEqual((prefix/name).read_bytes(),b'synthetic standalone helper file')
+            self.assertFalse((prefix/'public').exists())
             self.assertTrue(any('tools/regenerate.py' in cmd for cmd in commands))
             before=(prefix/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')).read_bytes()
             metadata['recipe']='stale';(runtime/'runtime.json').write_text(json.dumps(metadata))

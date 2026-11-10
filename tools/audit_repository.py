@@ -22,6 +22,7 @@ ALLOWED = {
     "cmake/Netplay.cmake",
     "cmake/PrebuiltRuntime.cmake",
     "tools/prebuilt_runtime.py",
+    "tools/steam_sdk.py",
     "tests/test_prebuilt_runtime.py",
     "src/netplay_crypto.hpp",
     "src/netplay_crypto.cpp",

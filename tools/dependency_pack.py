@@ -27,6 +27,11 @@ def load_sdk(root):
         path=(root/data['prebuilt_runtime']).resolve()
         if not path.is_relative_to(root) or not (path/'runtime.json').is_file():
             raise RuntimeError('Dependency pack has an invalid prebuilt runtime path')
+    if data.get('steam_helper'):
+        path=(root/data['steam_helper']).resolve()
+        if not path.is_relative_to(root):raise RuntimeError('Dependency pack has an invalid Steam helper path')
+        from tools.steam_sdk import validate_helper
+        validate_helper(path,data['platform'])
     return data
 
 def extract_archive(archive,dest):

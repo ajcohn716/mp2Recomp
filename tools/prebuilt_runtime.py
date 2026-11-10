@@ -10,6 +10,11 @@ RECIPE_FILES = (
     'src/mingw_compat.hpp',
     'tools/build_dependency_pack.py', 'tools/prebuilt_runtime.py',
     'tools/build_sdl.py', 'tools/dependency-environment.yml',
+    'tools/steam_sdk.py', 'steam-helper/CMakeLists.txt',
+    'steam-helper/STEAMWORKS-NOTICE.txt', 'LICENSE-STEAM-HELPER',
+    'src/netplay_steam.cpp', 'src/netplay_transport.hpp',
+    'src/steam_helper_main.cpp', 'src/steam_helper_protocol.hpp',
+    'src/netplay_steam_proxy.cpp', 'src/steam_helper_process.hpp',
 )
 
 

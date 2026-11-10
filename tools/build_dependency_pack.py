@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a redistributable SDK from open-source tools; never reads a game ROM."""
+"""Build tools, open-source libraries and a standalone Steam service; no ROM."""
 import argparse
 import json
 import os
@@ -14,7 +14,8 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--toolchain',type=Path,required=True);p.add_argument('--python',type=Path,required=True)
-    p.add_argument('--platform',required=True);p.add_argument('--output',type=Path,default=ROOT/'dist');p.add_argument('--jobs',default='3');args=p.parse_args()
+    p.add_argument('--platform',required=True);p.add_argument('--output',type=Path,default=ROOT/'dist');p.add_argument('--jobs',default='3')
+    p.add_argument('--steamworks-sdk',type=Path,required=True,help='Private build-only Steamworks SDK 1.65');args=p.parse_args()
     args.output=args.output.resolve();args.output.mkdir(parents=True,exist_ok=True)
     stage=args.output/'sdk-stage'
     if stage.exists():shutil.rmtree(stage)
@@ -78,6 +79,22 @@ def main():
         flags='--gcc-toolchain='+str(args.toolchain)+' --sysroot='+str(sysroot)
         compiler_flags=['-DCMAKE_C_FLAGS='+flags,'-DCMAKE_CXX_FLAGS='+flags]
     cmake=str(args.toolchain/('bin/cmake'+suffix))
+    # Compile Valve-facing code as its own MIT service, never into the GPL game.
+    helper_build=ROOT/'build/sdk-steam-helper'
+    subprocess.run([cmake,'--fresh','-S',str(ROOT/'steam-helper'),'-B',str(helper_build),'-G','Ninja',
+        '-DCMAKE_BUILD_TYPE=Release','-DMP2_STEAMWORKS_SDK='+str(args.steamworks_sdk.resolve()),
+        '-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
+    subprocess.run([cmake,'--build',str(helper_build),'-j',args.jobs],env=env,check=True)
+    copytree(helper_build/'bundle',stage/'steam')
+    helper=stage/'steam'/('mp2recomp-steam-helper'+suffix)
+    if not windows:
+        subprocess.run([str(args.toolchain/'bin/patchelf'),'--set-rpath','$ORIGIN:$ORIGIN/../toolchain/lib:$ORIGIN/lib',str(helper)],env=env,check=True)
+    subprocess.run([str(helper),'--self-test'],env=env,check=True)
+    from tools.steam_sdk import pack_helper,validate_helper
+    steam_metadata=pack_helper(ROOT,stage/'steam',args.platform)
+    validate_helper(stage/'steam',args.platform,ROOT)
+    data['steam_helper']='steam'
+    (stage/'sdk.json').write_text(json.dumps(data,indent=2))
     subprocess.run([cmake,'--fresh','-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
     subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'--build',str(build),'--target','N64RecompCLI','RSPRecomp','-j',args.jobs,'--','-k','0'],env=env,check=True)
     (stage/'tools').mkdir(exist_ok=True)
@@ -89,7 +106,8 @@ def main():
     check=ROOT/'build/sdk-platform-check'
     configure=[cmake,'--fresh','-S',str(ROOT),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
-        '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags]
+        '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),
+        '-DMP2_STEAM_HELPER_DIR='+str(stage/'steam'),*compiler_flags]
     subprocess.run([*configure,'-B',str(check),'-DMP2_PREBUILT_RUNTIME='],env=env,check=True)
     subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','netplay_test','public_ip_test','-j',args.jobs,'--','-k','0'],env=env,check=True)
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
@@ -132,6 +150,6 @@ def main():
         archive=args.output/(name+'.tar.gz')
         with tarfile.open(archive,'w:gz',compresslevel=3) as tar:
             for item in sorted(stage.iterdir()):tar.add(item,arcname=item.name)
-    (args.output/(name+'.json')).write_text(json.dumps({'platform':args.platform,'filename':archive.name,'sha256':sha256(archive),'runtime_recipe':metadata['recipe']},indent=2))
+    (args.output/(name+'.json')).write_text(json.dumps({'platform':args.platform,'filename':archive.name,'sha256':sha256(archive),'runtime_recipe':metadata['recipe'],'steam_helper_recipe':steam_metadata['recipe']},indent=2))
     print(archive)
 if __name__=='__main__':main()

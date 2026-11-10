@@ -35,6 +35,42 @@ jobs:
         run: |
           python tools/audit_repository.py
           python tools/bootstrap.py
+      - name: Prepare private build-only Steamworks SDK
+        shell: python
+        run: |
+          import os, sys
+          from pathlib import Path
+          sys.path.insert(0, os.getcwd())
+          from tools.steam_sdk import materialize_private_sdk
+          encoded = (
+            "${{ secrets.MP2_STEAMWORKS_SDK_00 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_01 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_02 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_03 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_04 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_05 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_06 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_07 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_08 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_09 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_10 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_11 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_12 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_13 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_14 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_15 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_16 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_17 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_18 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_19 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_20 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_21 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_22 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_23 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_24 }}"
+            "${{ secrets.MP2_STEAMWORKS_SDK_25 }}"
+          )
+          materialize_private_sdk(encoded, Path('build/private-steamworks-sdk'))
       - if: runner.os == 'Linux'
         name: Install runtime-data test display
         run: sudo apt-get update && sudo apt-get install -y xvfb xauth weston libvulkan1 mesa-vulkan-drivers
@@ -46,7 +82,7 @@ jobs:
       - if: runner.os == 'Linux'
         name: Build Linux dependency pack
         shell: micromamba-shell {0}
-        run: python tools/build_dependency_pack.py --toolchain "$CONDA_PREFIX" --python "$CONDA_PREFIX/bin/python" --platform linux-x86_64
+        run: python tools/build_dependency_pack.py --toolchain "$CONDA_PREFIX" --python "$CONDA_PREFIX/bin/python" --platform linux-x86_64 --steamworks-sdk "$GITHUB_WORKSPACE/build/private-steamworks-sdk"
       - if: runner.os == 'Windows'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
         with:
@@ -67,7 +103,7 @@ jobs:
           python -m pip install splat64[mips]==0.50.1 spimdisasm==1.42.4 PyYAML==6.0.3
           $python = (Get-Command python).Source
           $toolchain = Join-Path $env:RUNNER_TEMP 'msys64/clang64'
-          python tools/build_dependency_pack.py --toolchain "$toolchain" --python "$python" --platform windows-x86_64
+          python tools/build_dependency_pack.py --toolchain "$toolchain" --python "$python" --platform windows-x86_64 --steamworks-sdk "$env:GITHUB_WORKSPACE/build/private-steamworks-sdk"
       - name: Upload dependency packs and metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

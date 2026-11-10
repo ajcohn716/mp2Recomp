@@ -129,6 +129,8 @@ def install_runtime_libraries(sdk,source,prefix):
     sdk=Path(sdk);source=Path(source);prefix=Path(prefix)
     library_dir=prefix if os.name=='nt' else prefix/'lib'
     library_dir.mkdir(parents=True,exist_ok=True)
+    from tools.steam_sdk import install_helper
+    install_helper(sdk,prefix,source)
     if os.name!='nt':
         install_linux_runtime_data(sdk,prefix)
         for subdir in ('pulseaudio','libdecor'):
@@ -247,6 +249,9 @@ class Installer:
             else:
                 sdk=ensure_sdk(cache,ROOT,self.run,self.status,self.check_cancelled,dependency_pack,sdk_dir)
                 metadata=load_sdk(sdk);env=sdk_environment(sdk,metadata)
+                if metadata.get('steam_helper'):
+                    from tools.steam_sdk import validate_helper
+                    validate_helper(sdk/metadata['steam_helper'],metadata['platform'],source)
                 if metadata.get('prebuilt_runtime'):
                     from tools.prebuilt_runtime import validate_runtime
                     prebuilt_runtime=sdk/metadata['prebuilt_runtime']
@@ -272,6 +277,8 @@ class Installer:
                 '-DCMAKE_C_COMPILER='+cc,'-DCMAKE_CXX_COMPILER='+cxx,'-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
                 '-DMP2_PREBUILT_RUNTIME='+str(prebuilt_runtime or '')]
             if sdk:
+                if metadata.get('steam_helper'):
+                    configure+=['-DMP2_STEAM_HELPER_DIR='+str(sdk/metadata['steam_helper'])]
                 configure+=['-DCMAKE_MAKE_PROGRAM='+tool('ninja'),'-DCMAKE_PREFIX_PATH='+str(sdk/'toolchain'),
                     '-DSDL2_DIR='+str(sdk/'toolchain/lib/cmake/SDL2'),'-DSDL2_ttf_DIR='+str(sdk/'toolchain/lib/cmake/SDL2_ttf')]
                 if os.name!='nt':

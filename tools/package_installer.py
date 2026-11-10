@@ -13,6 +13,7 @@ sys.path.insert(0,str(ROOT))
 from install import source_files
 from tools.dependency_pack import platform_key,sha256
 from tools.prebuilt_runtime import recipe_digest
+from tools.steam_sdk import helper_recipe
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--metadata',type=Path,required=True)
@@ -30,6 +31,8 @@ def main():
         if entry.get('runtime_recipe')!=recipe_digest(source):
             raise SystemExit('SDK runtime recipe mismatch: '+item.name+'. Rebuild SDKs for this release.')
         entry['url']=f'https://github.com/{args.repository}/releases/download/{args.tag}/{entry["filename"]}'
+        if entry.get('steam_helper_recipe')!=helper_recipe(source):
+            raise SystemExit('SDK is missing the matching precompiled Steam helper: '+item.name)
         packs[entry.pop('platform')]=entry
     if platform_key() not in packs:raise SystemExit('Missing SDK metadata for '+platform_key())
     (source/'release-catalog.json').write_text(json.dumps({'format':1,'packs':packs},indent=2))
@@ -39,7 +42,7 @@ def main():
         '--distpath',str(dist),'--add-data',str(source)+os.pathsep+'source',
         '--hidden-import','tools.installer_gui',str(ROOT/'install.py')],cwd=ROOT,check=True)
     folder=dist/'mp2recomp-installer'
-    for name in ('LICENSE','THIRD_PARTY_NOTICES.md','README.md'):
+    for name in ('LICENSE','LICENSE-STEAM-HELPER','THIRD_PARTY_NOTICES.md','README.md'):
         shutil.copy2(source/name,folder/name)
     if os.name=='nt':
         required={'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll'}

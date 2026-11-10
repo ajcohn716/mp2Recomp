@@ -46,7 +46,7 @@ struct Process {
 #else
             "mp2recomp-steam-helper";
 #endif
-        if(auto override_path=std::getenv("MP2_STEAM_HELPER"))path=std::filesystem::u8path(override_path);
+        if(auto override_path=std::getenv("MP2_STEAM_HELPER"))path=std::filesystem::path(reinterpret_cast<const char8_t*>(override_path));
         if(!std::filesystem::is_regular_file(path))throw std::runtime_error("Steam helper missing. Reinstall the complete v0.2.1 installer, or select Direct TCP.");
 #ifdef _WIN32
         SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};
