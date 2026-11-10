@@ -1,12 +1,19 @@
 name: Installer release
 on:
   workflow_dispatch:
+    inputs:
+      sdk_run_id:
+        description: 'Reuse SDK artifacts from a verified run with matching dependency pins/toolchain recipe (blank rebuilds)'
+        type: string
+        default: ''
   push:
     tags: ['v*']
 permissions:
   contents: read
+  actions: read
 jobs:
   sdk:
+    if: inputs.sdk_run_id == ''
     strategy:
       fail-fast: false
       matrix:
@@ -63,6 +70,7 @@ jobs:
             dist/mp2recomp-sdk-*.zip
             dist/mp2recomp-sdk-*.json
   installer:
+    if: always() && (needs.sdk.result == 'success' || (needs.sdk.result == 'skipped' && inputs.sdk_run_id != ''))
     needs: sdk
     strategy:
       fail-fast: false
@@ -76,6 +84,8 @@ jobs:
           python-version: '3.12'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.sdk_run_id || github.run_id }}
           pattern: sdk-*
           merge-multiple: true
           path: dist/metadata

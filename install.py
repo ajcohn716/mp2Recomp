@@ -172,7 +172,7 @@ class Installer:
             if not rom_file.exists() or hashlib.sha1(rom_file.read_bytes()).hexdigest()!=ROM_SHA1:
                 rom_file.write_bytes(data)
             from tools.dependency_pack import ensure_sdk,load_sdk,sdk_environment
-            sdk=None
+            sdk=None;crt_files=[]
             if source_build:
                 self.status('Fetching pinned build dependencies')
                 self.run([sys.executable,'tools/bootstrap.py'],source)
@@ -188,6 +188,12 @@ class Installer:
                 for name in ('N64Recomp','runtime','rt64','decomp','directx-headers'):
                     self.check_cancelled()
                     shutil.copytree(sdk/'sources'/name,source/name,dirs_exist_ok=True,symlinks=False)
+                if os.name=='nt' and getattr(sys,'frozen',False):
+                    # Reuse the VC runtime already bundled for Qt. DXC also needs
+                    # it, including when the system has no VC redistributable.
+                    crt_files=[p for p in Path(sys._MEIPASS).rglob('*.dll')
+                        if p.name.lower().startswith(('msvcp140','vcruntime140','concrt140'))]
+                    for library in crt_files:shutil.copy2(library,source/'rt64/src/contrib/dxc/bin/x64'/library.name)
                 regenerate=[python,'tools/regenerate.py','--recompiler',tool('recompiler'),'--rsp',tool('rsp'),'--jobs',str(jobs)]
             self.status('Generating native game code from your ROM')
             self.run(regenerate,source,env)
@@ -236,6 +242,7 @@ class Installer:
                         graphics=('libvulkan','libdrm','libgbm','libGL','libEGL','libglapi')
                         if os.name!='nt' and library.name.startswith(graphics):continue
                         if library.is_file():shutil.copy2(library,library_dir/library.name)
+            for library in crt_files:shutil.copy2(library,prefix/library.name)
             if os.name=='nt':
                 # The executable locates ROM/userdata beside itself, even when
                 # launched through Explorer with a different working directory.

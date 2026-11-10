@@ -57,6 +57,9 @@ artifact and extract both its outer artifact ZIP and the installer archive
 inside. The SDK archive beside the executable stays compressed.
 Tagged `v*` builds create a draft release; publishing remains a separate step.
 No ROM, generated game code or game assets are sent to the cloud build.
+For installer-only changes, workflow dispatch can reuse a verified SDK run via
+`sdk_run_id`. Its dependency pins and toolchain
+recipe must match; leave the field blank to rebuild both SDKs.
 
 A developer checkout can use existing system dependencies instead:
 `python install.py --source-build --rom "/path/to/game.z64"`, or add `--gui`.
