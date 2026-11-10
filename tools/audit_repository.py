@@ -37,6 +37,8 @@ ALLOWED = {
     "tools/dependency_pack.py",
     "tools/regenerate.py",
     "tools/build_dependency_pack.py",
+    "tools/build_sdl.py",
+    "tools/test_wayland.py",
     "tools/installer_gui.py",
     "tools/package_installer.py",
     "tests/test_installer.py",

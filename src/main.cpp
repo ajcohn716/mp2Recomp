@@ -53,6 +53,9 @@ void configure_bundled_runtime() {
         setenv("FONTCONFIG_PATH",fonts.c_str(),1);
         setenv("FONTCONFIG_FILE",(fonts/"fonts.conf").c_str(),1);
     }
+    auto decorations=directory/"lib/libdecor/plugins-1";
+    if(std::filesystem::is_directory(decorations))
+        setenv("LIBDECOR_PLUGIN_DIR",decorations.c_str(),1);
     auto keyboard=directory/"share/X11/xkb";
     if(std::filesystem::is_regular_file(keyboard/"rules/evdev"))
         setenv("XKB_CONFIG_ROOT",keyboard.c_str(),1);
@@ -131,6 +134,9 @@ RspUcodeFunc* get_ucode(const OSTask* task) {
 
 int main(int argc, char** argv) try {
     configure_bundled_runtime();
+    for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--video-self-test") {
+        extern int mp2_video_self_test();return mp2_video_self_test();
+    }
     for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--runtime-self-test") {
         extern int mp2_runtime_self_test();return mp2_runtime_self_test();
     }

@@ -127,11 +127,19 @@ class InstallerTests(unittest.TestCase):
         (rules/'10-test.conf').write_text('<fontconfig/>')
         (conf/'10-test.conf').symlink_to('../../../share/fontconfig/conf.avail/10-test.conf')
         (conf.parent/'fonts.conf').write_text('/home/runner/should-not-be-copied')
-        prefix=self.root/'installed';install.install_linux_runtime_data(sdk,prefix)
+        library=toolchain/'lib';library.mkdir()
+        (library/'libwayland-client.so.0').write_text('Wayland client runtime')
+        (library/'libvulkan.so.1').write_text('use system graphics loader')
+        plugins=library/'libdecor/plugins-1';plugins.mkdir(parents=True)
+        (plugins/'libdecor-gtk.so').write_text('Wayland decoration plugin')
+        prefix=self.root/'installed';install.install_runtime_libraries(sdk,self.root/'source',prefix)
         moved=self.root/'moved with spaces';prefix.rename(moved);shutil.rmtree(sdk)
         self.assertEqual((moved/'share/X11/xkb/rules/evdev').read_text(),'synthetic keymap rules')
         self.assertEqual((moved/'etc/fonts/conf.d/10-test.conf').read_text(),'<fontconfig/>')
         self.assertNotIn('/home/runner',(moved/'etc/fonts/fonts.conf').read_text())
+        self.assertEqual((moved/'lib/libwayland-client.so.0').read_text(),'Wayland client runtime')
+        self.assertEqual((moved/'lib/libdecor/plugins-1/libdecor-gtk.so').read_text(),'Wayland decoration plugin')
+        self.assertFalse((moved/'lib/libvulkan.so.1').exists())
 
     def test_verified_pack_and_cache(self):
         import io,json,tarfile

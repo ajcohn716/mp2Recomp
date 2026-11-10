@@ -15,6 +15,9 @@ dependencies:
   - pkg-config
   - sdl2=2.30
   - sdl2_ttf=2
+  - wayland
+  - wayland-protocols
+  - libdecor
   - gtk3
   - glib
   - zlib

@@ -37,7 +37,7 @@ jobs:
           python tools/bootstrap.py
       - if: runner.os == 'Linux'
         name: Install runtime-data test display
-        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth weston libvulkan1 mesa-vulkan-drivers
       - if: runner.os == 'Linux'
         uses: mamba-org/setup-micromamba@add3a49764cedee8ee24e82dfde87f5bc2914462
         with:

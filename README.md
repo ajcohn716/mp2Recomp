@@ -65,6 +65,12 @@ A developer checkout can use existing system dependencies instead:
 `python install.py --source-build --rom "/path/to/game.z64"`, or add `--gui`.
 The GUI requires `pip install -r tools/installer-requirements.txt` in this mode.
 
+The Linux SDK builds pinned SDL 2.30.10 with both Wayland and X11 support,
+including libdecor and its decoration plugins. Packaging checks force Wayland
+on a headless compositor and create a Vulkan-capable window without X11 fallback.
+To check the installed backend on a Wayland desktop, run
+`SDL_VIDEODRIVER=wayland ./play --video-self-test` from the game directory.
+
 ## Run a local build
 
 From this directory:

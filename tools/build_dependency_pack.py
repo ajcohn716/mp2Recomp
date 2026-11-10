@@ -29,6 +29,8 @@ def main():
         copytree(python_root,stage/'python')
         python=stage/'python/python.exe'
     else:
+        from tools.build_sdl import build_sdl
+        sdl_drivers=build_sdl(args.toolchain,args.jobs)
         packed=args.output/'conda-environment.tar.gz'
         subprocess.run([str(args.python),'-m','conda_pack.cli','-p',str(args.toolchain),'-o',str(packed),'--force'],check=True)
         (stage/'toolchain').mkdir(exist_ok=True)
@@ -36,7 +38,7 @@ def main():
         packed.unlink()
         python=stage/'toolchain/bin/python'
     sources=stage/'sources';sources.mkdir(exist_ok=True)
-    for name in ('N64Recomp','runtime','rt64','directx-headers','libdatachannel'):copytree(ROOT/name,sources/name)
+    for name in ('N64Recomp','runtime','rt64','directx-headers','libdatachannel','SDL'):copytree(ROOT/name,sources/name)
     decomp=sources/'decomp';decomp.mkdir(exist_ok=True)
     for name in ('marioparty2.yaml','symbol_addrs.txt'):shutil.copy2(ROOT/'decomp'/name,decomp/name)
     # Preserve license files and package metadata; only game metadata is taken
@@ -48,6 +50,7 @@ def main():
         'recompiler':'tools/N64Recomp'+suffix,'rsp':'tools/RSPRecomp'+suffix}
     data={'format':1,'platform':args.platform,'tools':tools,'sources':'sources'}
     if not windows:
+        data['sdl_video_drivers']=sdl_drivers
         data['relocate']='toolchain/bin/conda-unpack'
         tools['patchelf']='toolchain/bin/patchelf'
     (stage/'sdk.json').write_text(json.dumps(data,indent=2))
@@ -87,11 +90,18 @@ def main():
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
     subprocess.run([str(check/('netplay_test'+suffix))],env=env,check=True)
     if not windows:
-        from install import install_linux_runtime_data
-        install_linux_runtime_data(stage,check)
-        probe_env=dict(env,FONTCONFIG_FILE='/missing/build-host/fonts.conf',
-            FONTCONFIG_PATH='/missing/build-host/fonts',XKB_CONFIG_ROOT='/missing/build-host/xkb',GDK_BACKEND='x11')
-        subprocess.run(['xvfb-run','-a',str(check/'mp2recomp'),'--runtime-self-test'],env=probe_env,check=True)
+        from install import install_runtime_libraries
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix='mp2-runtime-check-') as temporary:
+            installed=Path(temporary)
+            shutil.copy2(check/'mp2recomp',installed/'mp2recomp')
+            subprocess.run([str(args.toolchain/'bin/patchelf'),'--set-rpath','$ORIGIN/lib',str(installed/'mp2recomp')],env=env,check=True)
+            install_runtime_libraries(stage,ROOT,installed)
+            probe_env=dict(os.environ,LD_LIBRARY_PATH=str(installed/'lib'),FONTCONFIG_FILE='/missing/build-host/fonts.conf',
+                FONTCONFIG_PATH='/missing/build-host/fonts',XKB_CONFIG_ROOT='/missing/build-host/xkb',GDK_BACKEND='x11')
+            subprocess.run(['xvfb-run','-a',str(installed/'mp2recomp'),'--runtime-self-test'],env=probe_env,check=True)
+            from tools.test_wayland import test_wayland
+            test_wayland(installed/'mp2recomp',probe_env)
     for path in stage.rglob('*'):
         if path.is_file() and path.suffix.lower() in ('.z64','.v64','.n64'):raise SystemExit('ROM-like file rejected: '+str(path))
     name='mp2recomp-sdk-'+args.platform

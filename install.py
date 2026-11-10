@@ -104,6 +104,26 @@ def install_linux_runtime_data(sdk,prefix):
 </fontconfig>
 ''')
 
+def install_runtime_libraries(sdk,source,prefix):
+    sdk=Path(sdk);source=Path(source);prefix=Path(prefix)
+    library_dir=prefix if os.name=='nt' else prefix/'lib'
+    library_dir.mkdir(exist_ok=True)
+    if os.name!='nt':
+        install_linux_runtime_data(sdk,prefix)
+        for subdir in ('pulseaudio','libdecor'):
+            plugins=sdk/'toolchain/lib'/subdir
+            if plugins.is_dir():shutil.copytree(plugins,library_dir/subdir,dirs_exist_ok=True)
+    pattern='*.dll' if os.name=='nt' else '*.so*'
+    search=[sdk/'toolchain'/('bin' if os.name=='nt' else 'lib'),source/'rt64/src/contrib/dxc'/('bin/x64' if os.name=='nt' else 'lib/x64')]
+    if os.name=='nt':search+=[sdk/'python']
+    for directory in search:
+        for library in directory.glob(pattern):
+            # The Vulkan loader and GPU-driver support libraries belong
+            # to the player's installed graphics stack.
+            graphics=('libvulkan','libdrm','libgbm','libGL','libEGL','libglapi')
+            if os.name!='nt' and library.name.startswith(graphics):continue
+            if library.is_file():shutil.copy2(library,library_dir/library.name)
+
 class Installer:
     def __init__(self, status=print, log=print):
         self.status, self.log = status, log
@@ -251,22 +271,7 @@ class Installer:
             put(ROM_NAME,contents=data)
             if sdk:
                 self.status('Installing runtime libraries')
-                library_dir=prefix if os.name=='nt' else prefix/'lib'
-                library_dir.mkdir(exist_ok=True)
-                if os.name!='nt':
-                    install_linux_runtime_data(sdk,prefix)
-                    pulse=sdk/'toolchain/lib/pulseaudio'
-                    if pulse.is_dir():shutil.copytree(pulse,library_dir/'pulseaudio',dirs_exist_ok=True)
-                pattern='*.dll' if os.name=='nt' else '*.so*'
-                search=[sdk/'toolchain'/('bin' if os.name=='nt' else 'lib'),source/'rt64/src/contrib/dxc'/('bin/x64' if os.name=='nt' else 'lib/x64')]
-                if os.name=='nt':search+=[sdk/'python']
-                for directory in search:
-                    for library in directory.glob(pattern):
-                        # The Vulkan loader and GPU-driver support libraries belong
-                        # to the player's installed graphics stack.
-                        graphics=('libvulkan','libdrm','libgbm','libGL','libEGL','libglapi')
-                        if os.name!='nt' and library.name.startswith(graphics):continue
-                        if library.is_file():shutil.copy2(library,library_dir/library.name)
+                install_runtime_libraries(sdk,source,prefix)
             for library in crt_files:shutil.copy2(library,prefix/library.name)
             if os.name=='nt':
                 # The executable locates ROM/userdata beside itself, even when

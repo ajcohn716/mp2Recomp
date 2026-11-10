@@ -22,5 +22,9 @@
   "libdatachannel": {
     "url": "https://github.com/paullouisageneau/libdatachannel.git",
     "commit": "6b1e2e620f1e37f0eafeee702eaea0043cb305fd"
+  },
+  "SDL": {
+    "url": "https://github.com/libsdl-org/SDL.git",
+    "commit": "9c821dc21ccbd69b2bda421fdb35cb4ae2da8f5e"
   }
 }
