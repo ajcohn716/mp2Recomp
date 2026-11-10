@@ -215,6 +215,8 @@ class Installer:
                 temp.chmod(0o755 if executable else 0o600)
                 os.replace(temp,target)
             binary='mp2recomp.exe' if os.name=='nt' else 'mp2recomp'
+            if sdk and os.name!='nt':
+                self.run([tool('patchelf'),'--set-rpath','$ORIGIN/lib',str(source/'build/native'/binary)],source,env)
             put(binary,copy_from=source/'build/native'/binary,executable=True)
             put(ROM_NAME,contents=data)
             if sdk:
@@ -226,6 +228,10 @@ class Installer:
                 if os.name=='nt':search+=[sdk/'python']
                 for directory in search:
                     for library in directory.glob(pattern):
+                        # The Vulkan loader and GPU-driver support libraries belong
+                        # to the player's installed graphics stack.
+                        graphics=('libvulkan','libdrm','libgbm','libGL','libEGL','libglapi')
+                        if os.name!='nt' and library.name.startswith(graphics):continue
                         if library.is_file():shutil.copy2(library,library_dir/library.name)
             if os.name=='nt':
                 # The executable locates ROM/userdata beside itself, even when

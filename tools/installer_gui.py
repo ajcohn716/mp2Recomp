@@ -42,7 +42,7 @@ class Window(QMainWindow):
         self.rom=QLineEdit(str(args.rom or ''));self.rom.setPlaceholderText('ROM file');layout.addWidget(self.rom)
         row=QHBoxLayout();row.addWidget(QLabel('Install to'));self.prefix=QLineEdit(str(args.prefix));row.addWidget(self.prefix)
         folder=QPushButton('Browse');folder.clicked.connect(self.choose_folder);row.addWidget(folder);layout.addLayout(row)
-        info=QLabel('The first install downloads a dependency pack and builds from your ROM locally.\nYour ROM stays on this computer. Saves are preserved when reinstalling.');info.setWordWrap(True);layout.addWidget(info)
+        info=QLabel('The installer prepares build tools and builds from your ROM locally.\nYour ROM stays on this computer. Saves are preserved when reinstalling.');info.setWordWrap(True);layout.addWidget(info)
         advanced=QGroupBox('Build options');advanced.setCheckable(True);advanced.setChecked(False);layout.addWidget(advanced)
         options=QVBoxLayout(advanced)
         self.cache=QLineEdit(str(args.build_dir or ''));self.cache.setPlaceholderText('Build directory (automatic cache by default)');options.addWidget(self.cache)
