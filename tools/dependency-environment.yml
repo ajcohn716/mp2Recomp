@@ -18,6 +18,7 @@ dependencies:
   - gtk3
   - glib
   - zlib
+  - expat
   - patchelf
   - conda-pack=0.8
   - pip:
