@@ -52,6 +52,20 @@ class InstallerTests(unittest.TestCase):
             engine.run=lambda *a,**k:(_ for _ in ()).throw(install.InstallError('fake build failure'))
             with self.assertRaises(install.InstallError):engine.install(self.rom,prefix,build,2,source_build=True)
             self.assertEqual((prefix/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')).read_bytes(),before)
+    def test_default_install_directories(self):
+        # Exercise the default install/cache layout through the overlap guard.
+        env={'LOCALAPPDATA':str(self.root/'local'), 'XDG_DATA_HOME':str(self.root/'data'),
+             'XDG_CACHE_HOME':str(self.root/'cache')}
+        def run(command,cwd,env=None):
+            if command[:2]==['cmake','--build']:
+                binary=cwd/'build/native'/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')
+                binary.parent.mkdir(parents=True);binary.write_text('synthetic executable')
+        with patch.dict(os.environ,env),patch.object(install,'source_files',return_value=['install.py']),patch.object(install,'system_problems',return_value=[]):
+            engine=install.Installer(lambda _:None,lambda _:None);engine.run=run
+            launcher=engine.install(self.rom,install.default_prefix(),jobs=1,desktop=False,source_build=True)
+            self.assertTrue(launcher.is_file())
+            self.assertEqual((launcher.parent/install.ROM_NAME).read_bytes(),self.data)
+
     def test_cancel_before_install(self):
         engine=install.Installer(lambda _:None,lambda _:None);engine.cancel()
         with self.assertRaises(install.Cancelled):engine.install(self.rom,self.root/'install')

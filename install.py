@@ -147,7 +147,7 @@ class Installer:
         if problems: raise InstallError('\n'.join(problems))
         prefix = Path(prefix).expanduser().resolve()
         digest = source_digest()
-        cache = Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'mp2recomp/cache' if os.name=='nt' else Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))
+        cache = Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'mp2recomp-cache' if os.name=='nt' else Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))
         build_dir = Path(build_dir).expanduser().resolve() if build_dir else cache/'mp2recomp'/'installer'/digest[:12]
         # Never overwrite the developer checkout or build under the install directory.
         if build_dir == ROOT or ROOT in build_dir.parents or prefix == ROOT or ROOT in prefix.parents:
