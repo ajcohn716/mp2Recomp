@@ -77,7 +77,7 @@ class InstallerTests(unittest.TestCase):
             from tools.installer_gui import local_drop_path
             from PySide6.QtCore import QUrl
         except ImportError:self.skipTest('PySide6 not available')
-        self.assertEqual(local_drop_path([QUrl.fromLocalFile(str(self.rom))]),str(self.rom))
+        self.assertEqual(Path(local_drop_path([QUrl.fromLocalFile(str(self.rom))])),self.rom)
         self.assertIsNone(local_drop_path([QUrl('https://example.invalid/rom')]))
         self.assertIsNone(local_drop_path([]))
 
