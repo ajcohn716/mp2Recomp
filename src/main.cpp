@@ -213,7 +213,7 @@ int main(int argc, char** argv) try {
         fprintf(stderr, "ROM validation failed: %d\n", int(result)); return 1;
     }
     recomp::Configuration config{};
-    config.project_version = {0, 1, 0, "poc"};
+    config.project_version = {0, 1, 1, "poc"};
 #ifdef _WIN32
     SDL_SysWMinfo wm{};SDL_VERSION(&wm.version);
     if (!SDL_GetWindowWMInfo(window,&wm)) { fprintf(stderr,"%s\n",SDL_GetError());return 1; }

@@ -9,6 +9,7 @@ ALLOWED = {
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "docs/releases/v0.1.md",
+    "docs/releases/v0.1.1.md",
     "cmake/Netplay.cmake",
     "src/netplay_crypto.hpp",
     "src/netplay_crypto.cpp",
