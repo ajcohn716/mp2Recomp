@@ -46,7 +46,19 @@ int main(int argc,char** argv) try {
 #else
     setenv("MP2_STEAM_HELPER",path.c_str(),1);
 #endif
+#ifdef _WIN32
+    _putenv_s("MP2_STEAM_HELPER",(path+".missing").c_str());
+#else
+    setenv("MP2_STEAM_HELPER",(path+".missing").c_str(),1);
+#endif
     netplay::SteamSocial social;
+    wait([&]{return social.status().message.find("Steam helper missing")!=std::string::npos;});
+#ifdef _WIN32
+    _putenv_s("MP2_STEAM_HELPER",path.c_str());
+#else
+    setenv("MP2_STEAM_HELPER",path.c_str(),1);
+#endif
+    social.refresh();
     netplay::SteamSocialStatus view;
     wait([&]{view=social.status();return view.available&&!view.friends.empty()&&!view.invitations.empty();});
     require(view.friends[0].name=="Spacewar friend","Lost friend metadata");

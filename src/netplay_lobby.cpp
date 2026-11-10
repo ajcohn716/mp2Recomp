@@ -6,7 +6,8 @@
 namespace netplay {
 std::unique_ptr<Session> lobby(const Options& initial,const std::vector<uint8_t>& host_save,bool connect_immediately) {
     std::unique_ptr<Session> session;
-    auto connect=[&](const Options& options){session=std::make_unique<Session>(options);};
+    SteamSocial social;
+    auto connect=[&](const Options& options){validate_options(options);session.reset();session=std::make_unique<Session>(options);};
     settings::set_netplay({
         .connect=connect,
         .status=[&]{return session?session->status():Status{};},
@@ -17,7 +18,12 @@ std::unique_ptr<Session> lobby(const Options& initial,const std::vector<uint8_t>
             session->start(host_save);
         },
         .leave=[&]{session.reset();},
-        .lobby=true
+        .lobby=true,
+        .steam_status=[&]{return social.status();},
+        .refresh_friends=[&]{social.refresh();},
+        .invite_friend=[&](const auto& id){social.invite(id);},
+        .accept_invite=[&](const auto& id){social.accept(id);},
+        .dismiss_invite=[&](const auto& id){social.dismiss(id);}
     },initial);
     settings::show(settings::Page::Netplay);
     if(!settings::visible())throw std::runtime_error("Cannot open the netplay settings window");

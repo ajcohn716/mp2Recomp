@@ -25,15 +25,18 @@ int main() try {
                 require(room.eligible(id),"Friend list included someone outside Spacewar");++listed;
             }
             if(kind=='p')invite_ready=data=="1";
+            if(kind=='s')throw std::runtime_error(data);
         };
         room.social('f',"");
         require(listed<=SteamFriends()->GetFriendCount(k_EFriendFlagImmediate),"Duplicate friends");
-        room.social('p',"opaque-test-connect-data");
-        auto lobby_deadline=std::chrono::steady_clock::now()+20s;
-        while(!invite_ready&&std::chrono::steady_clock::now()<lobby_deadline){room.poll();std::this_thread::sleep_for(1ms);}
-        require(invite_ready,"Private Steam invite lobby creation failed");
-        require(std::string(SteamMatchmaking()->GetLobbyData(room.invitation_lobby,"connect"))=="opaque-test-connect-data","Missing invitation connect data");
-        room.social('p',"");require(!invite_ready&&!room.invitation_lobby.IsValid(),"Invite lobby survived room closure");
+        if(attempt==0) {
+            room.social('p',"opaque-test-connect-data");
+            auto lobby_deadline=std::chrono::steady_clock::now()+20s;
+            while(!invite_ready&&std::chrono::steady_clock::now()<lobby_deadline){room.poll();std::this_thread::sleep_for(1ms);}
+            require(invite_ready,"Private Steam invite lobby creation failed");
+            require(std::string(SteamMatchmaking()->GetLobbyData(room.invitation_lobby,"connect"))=="opaque-test-connect-data","Missing invitation connect data");
+            room.social('p',"");require(!invite_ready&&!room.invitation_lobby.IsValid(),"Invite lobby survived room closure");
+        }
         room.social_event={};
         require(room.listen("",0,[](auto){})==1,"Steam listener creation failed");
         auto first=std::static_pointer_cast<SteamSocket>(room.socket());

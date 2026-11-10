@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <functional>
 #include "netplay.hpp"
+#include "netplay_steam_social.hpp"
 namespace settings {
 enum class Page { Input, Audio, Graphics, Netplay };
 struct Graphics {
@@ -17,6 +18,9 @@ struct NetplayActions {
     std::function<netplay::Status()> status;
     std::function<void()> start, leave;
     bool lobby{};
+    std::function<netplay::SteamSocialStatus()> steam_status;
+    std::function<void()> refresh_friends;
+    std::function<void(const std::string&)> invite_friend, accept_invite, dismiss_invite;
 };
 void init(const std::filesystem::path& directory);
 void set_game_window(SDL_Window* window);

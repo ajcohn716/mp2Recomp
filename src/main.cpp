@@ -211,6 +211,8 @@ int main(int argc, char** argv) try {
     if ((probe || multiplayer) && auto_start_at) throw std::runtime_error("Use --netplay-bot for deterministic automated inputs");
     auto config_dir = std::filesystem::absolute(data_directory);
     settings::init(config_dir);
+    std::unique_ptr<netplay::SteamSocial> steam_social;
+    if(!headless&&!probe&&!checkpoints)steam_social=std::make_unique<netplay::SteamSocial>();
     std::unique_ptr<netplay::Session> session;
     if (multiplayer) {
         std::vector<uint8_t> host_save;
@@ -254,12 +256,22 @@ int main(int argc, char** argv) try {
     std::filesystem::create_directories(config_dir);
     recomp::register_config_path(config_dir);
     settings::set_game_window(window);
-    if (session) settings::set_netplay({.status=[&]{return session->status();}});
-    else if (!probe) settings::set_netplay({.connect=[](const netplay::Options& options){
+    settings::NetplayActions network_actions;
+    if(session)network_actions.status=[&]{return session->status();};
+    if(!probe&&!checkpoints)network_actions.connect=[](const netplay::Options& options){
         netplay::validate_options(options);
         requested_room=options;
+        netplay::game::cancel();
         ultramodern::quit();
-    }},network);
+    };
+    if(steam_social) {
+        network_actions.steam_status=[&]{return steam_social->status();};
+        network_actions.refresh_friends=[&]{steam_social->refresh();};
+        network_actions.invite_friend=[&](const auto& id){steam_social->invite(id);};
+        network_actions.accept_invite=[&](const auto& id){steam_social->accept(id);};
+        network_actions.dismiss_invite=[&](const auto& id){steam_social->dismiss(id);};
+    }
+    settings::set_netplay(std::move(network_actions),network);
     if (open_settings) settings::toggle();
     register_mp2_overlays();
     recomp::register_game({
@@ -301,6 +313,7 @@ int main(int argc, char** argv) try {
     if (session && netplay::game::failed() && !headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Multiplayer session ended", session->status().message.c_str(), window);
     settings::shutdown();
     SDL_DestroyWindow(window);
+    session.reset();steam_social.reset();
     // The runtime has process-global simulation/thread state. Replace the
     // process after orderly shutdown to boot a synchronized room from frame 0.
     auto load_state=mp2::checkpoint::requested_load();

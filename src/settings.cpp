@@ -53,6 +53,17 @@ netplay::Options network;
 std::string port{"7777"};
 int field{-1};
 netplay::Status room;
+netplay::SteamSocialStatus steam_social;
+enum class NetworkPanel { Room, Friends, Invites };
+NetworkPanel network_panel{NetworkPanel::Room};
+size_t social_page{};
+Uint32 last_social_poll{};
+std::string social_message, accepting_invite;
+uint64_t social_message_revision{};
+bool can_invite() {
+    return room.slot==0&&room.connected&&!room.running&&!room.failed&&room.players<4&&room.code.starts_with("MP2S-");
+}
+
 std::future<std::string> public_ip;
 unsigned address_revision{}, lookup_revision{};
 bool lookup_attempted{};
@@ -179,13 +190,41 @@ void draw() {
         text(24,490,"Widescreen expands the view; some game UI may stay 4:3.");
     } else {
         bool connected=room_active();
-        if(!connected) {
+        if(network_panel!=NetworkPanel::Room) {
+            bool friends=network_panel==NetworkPanel::Friends;
+            text(24,130,friends?"Invite Steam friends":"Steam invitations");
+            button(620,124,150,"Back to room");
+            text(24,166,friends?"Only friends currently playing Spacewar (App ID 480) are shown.":"Accept joins a new room and ends your current game or room.");
+            size_t count=friends?steam_social.friends.size():steam_social.invitations.size();
+            if(social_page*8>=count)social_page=0;
+            if(!count)text(24,218,friends?"No friends currently playing Spacewar.":"No pending Steam invitations.");
+            for(size_t i=social_page*8;i<count&&i<(social_page+1)*8;++i) {
+                int y=214+int(i%8)*40;
+                if(friends) {
+                    clipped_text(24,y,550,steam_social.friends[i].name);
+                    button(600,y,170,"Invite");
+                } else {
+                    clipped_text(24,y,450,steam_social.invitations[i].name);
+                    button(490,y,130,accepting_invite==steam_social.invitations[i].id?"Joining...":"Accept");
+                    button(640,y,130,"Dismiss");
+                }
+            }
+            if(count>8) {
+                button(24,550,130,"Previous");button(170,550,130,"Next");
+                text(330,552,"Page "+std::to_string(social_page+1)+" / "+std::to_string((count+7)/8));
+            }
+            if(friends) {
+                button(24,592,190,"Refresh friends");
+                text(24,630,steam_social.invite_ready?"Choose a friend to send a Steam invite.":"Steam invite lobby is not ready. Refresh to retry.");
+            } else button(24,592,190,"Refresh Steam");
+            clipped_text(24,654,746,steam_social.message);
+        } else if(!connected) {
             text(24,130,network_actions.lobby?"Create a room or join a friend before starting the game.":"Creating or joining restarts the game into the room lobby.");
             bool steam=network.transport==netplay::Transport::Steam;
             button(24,154,350,steam?"Transport: Steam (App ID 480)  >":"Transport: Direct TCP  >");
             if(steam) {
                 text(24,204,"Sign into Steam. Friends join using their own Steam accounts.");
-                text(24,230,"Create a room and share its code. No port forwarding required.");
+                text(24,230,"Create a room, then invite friends or share its code.");
             } else {
                 text(24,182,"Host's public IP / DNS name");text(640,182,"TCP port");
                 field_box(0,24,204,592,34,network.address);field_box(1,640,204,130,34,port);
@@ -198,10 +237,13 @@ void draw() {
             text(24,522,steam?"No IP lookup or router port forwarding is needed.":"Host: forward the TCP port above to this computer.");
             text(24,552,steam?"Share the MP2S code privately, then start when everyone joins.":"Use your LAN IP for local play. Friends only need the code.");
             text(24,582,"Tab changes fields. Ctrl+A clears. Ctrl+V pastes.");
+            if(network_actions.steam_status)button(24,620,300,"Steam invites ("+std::to_string(steam_social.invitations.size())+")");
         } else {
             text(24,130,room.running?"Netplay session in progress":"Room lobby  /  Up to four players");
             text(24,168,"Share this connection code privately");field_box(2,24,198,746,90,room.code);
             button(24,304,190,"Copy code");
+            if(can_invite()&&network_actions.invite_friend)button(230,304,240,"Invite friends");
+            if(network_actions.steam_status)button(490,304,280,"Steam invites ("+std::to_string(steam_social.invitations.size())+")");
             for(int p=0;p<4;++p) {
                 std::string line="Player "+std::to_string(p+1)+(room.slot==p?" (you)":"");
                 line+="   ";line+=room.ready[p]?"Connected":"Waiting";
@@ -276,7 +318,8 @@ void set_netplay(NetplayActions actions,const netplay::Options& initial) {
     network_actions=std::move(actions);network=initial;port=std::to_string(initial.port);
     room=network_actions.status?network_actions.status():netplay::Status{};
     ++address_revision;lookup_attempted=false;lookup_status.clear();
-    field=-1;status.clear();dirty=true;text_input();
+    field=-1;status.clear();network_panel=NetworkPanel::Room;social_page=0;
+    last_social_poll=0;social_message.clear();social_message_revision=0;accepting_invite.clear();steam_social={};dirty=true;text_input();
 }
 void show(Page next){if(drag>=0)save();if(!open)toggle();change_page(next);}
 bool visible(){return open;}
@@ -308,7 +351,7 @@ bool event(const SDL_Event& e) {
         auto key=e.key.keysym.scancode;
         if(key==SDL_SCANCODE_ESCAPE){if(capture>=0){capture=-1;dirty=true;}else toggle();}
         else if(capture>=0&&!capture_pad){bindings[capture].key=key;capture=-1;save();}
-        else if(page==Page::Netplay&&!room_active()) {
+        else if(page==Page::Netplay&&network_panel==NetworkPanel::Room&&!room_active()) {
             if(key==SDL_SCANCODE_TAB){field=network.transport==netplay::Transport::Steam?2:(field+1)%3;text_input();}
             else if(field>=0) {
                 auto& target=field==0?network.address:field==1?port:network.code;
@@ -357,7 +400,38 @@ bool event(const SDL_Event& e) {
             if(hit(x,y,280,378,380,26)){g.filtering=(g.filtering+1)%3;changed=true;}
             if(changed){set_graphics(g);save();}
         } else {
-            if(!room_active()) {
+            auto social_action=[&](auto action){
+                try{action();}catch(const std::exception& ex){status=ex.what();accepting_invite.clear();}
+                dirty=true;
+            };
+            if(network_panel!=NetworkPanel::Room) {
+                bool friends=network_panel==NetworkPanel::Friends;
+                if(hit(x,y,620,124,150,26)){network_panel=NetworkPanel::Room;dirty=true;return true;}
+                size_t count=friends?steam_social.friends.size():steam_social.invitations.size();
+                if(hit(x,y,24,550,130,26)&&social_page)social_page--;
+                if(hit(x,y,170,550,130,26)&&(social_page+1)*8<count)social_page++;
+                if(hit(x,y,24,592,190,26)&&network_actions.refresh_friends)social_action(network_actions.refresh_friends);
+                for(size_t i=social_page*8;i<count&&i<(social_page+1)*8;++i) {
+                    int row=214+int(i%8)*40;
+                    if(friends) {
+                        if(hit(x,y,600,row,170,26)&&can_invite()&&steam_social.invite_ready&&network_actions.invite_friend)
+                            social_action([&]{network_actions.invite_friend(steam_social.friends[i].id);status="Sending Steam invite...";});
+                    } else {
+                        auto id=steam_social.invitations[i].id;
+                        if(hit(x,y,490,row,130,26)&&accepting_invite.empty()&&network_actions.connect&&network_actions.accept_invite)
+                            social_action([&]{network_actions.accept_invite(id);accepting_invite=id;status="Joining invited room...";});
+                        if(hit(x,y,640,row,130,26)&&accepting_invite.empty()&&network_actions.dismiss_invite)
+                            social_action([&]{network_actions.dismiss_invite(id);last_social_poll=0;});
+                    }
+                }
+                dirty=true;
+            } else if(network_actions.steam_status&&hit(x,y,room_active()?490:24,room_active()?304:620,room_active()?280:300,26)) {
+                network_panel=NetworkPanel::Invites;social_page=0;field=-1;text_input();dirty=true;
+            } else if(can_invite()&&network_actions.invite_friend&&hit(x,y,230,304,240,26)) {
+                network_panel=NetworkPanel::Friends;social_page=0;field=-1;text_input();
+                if(network_actions.refresh_friends)social_action(network_actions.refresh_friends);
+                dirty=true;
+            } else if(!room_active()) {
                 if(hit(x,y,24,154,350,26)) {
                     network.transport=network.transport==netplay::Transport::Steam?netplay::Transport::Direct:netplay::Transport::Steam;
                     field=-1;status.clear();
@@ -395,6 +469,30 @@ bool event(const SDL_Event& e) {
 }
 void update(uint16_t& b,float& x,float& y) {
     b=0;x=y=0;
+    if(network_actions.steam_status&&(last_social_poll==0||SDL_GetTicks()-last_social_poll>=250)) {
+        last_social_poll=SDL_GetTicks();
+        try {
+            auto previous=steam_social.invitations;
+            steam_social=network_actions.steam_status();
+            if(steam_social.message!=social_message||steam_social.message_revision!=social_message_revision) {
+                social_message=steam_social.message;social_message_revision=steam_social.message_revision;
+                if(!social_message.empty()){status=social_message;accepting_invite.clear();}
+            }
+            bool incoming=std::any_of(steam_social.invitations.begin(),steam_social.invitations.end(),[&](const auto& invite){
+                return std::none_of(previous.begin(),previous.end(),[&](const auto& old){return old.id==invite.id;});
+            });
+            if(incoming) {show(Page::Netplay);network_panel=NetworkPanel::Invites;social_page=0;}
+            if(!steam_social.join_code.empty()&&network_actions.connect) {
+                if(!steam_social.join_code.starts_with("MP2S-"))throw std::runtime_error("Invite is not a Mario Party 2 Steam room.");
+                netplay::Options options;options.code=steam_social.join_code;
+                network_actions.connect(options);
+                if(network_actions.dismiss_invite&&!accepting_invite.empty())network_actions.dismiss_invite(accepting_invite);
+                accepting_invite.clear();network_panel=NetworkPanel::Room;
+                if(network_actions.status)room=network_actions.status();
+            }
+        }catch(const std::exception& ex){status=ex.what();accepting_invite.clear();}
+        dirty=true;
+    }
     if(game_window) {
         bool current=(SDL_GetWindowFlags(game_window)&SDL_WINDOW_FULLSCREEN)!=0;
         if(current!=graphics().fullscreen && SDL_SetWindowFullscreen(game_window,graphics().fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0)!=0) {

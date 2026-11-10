@@ -78,7 +78,11 @@ struct Steam final : Transport {
     }
     void created(LobbyCreated_t* event,bool failed) {
         creating_lobby=false;
-        if(failed||event->m_eResult!=k_EResultOK){emit('s',"Steam could not create the invite lobby. Try again.");return;}
+        if(failed||event->m_eResult!=k_EResultOK){
+            emit('s',!failed&&event->m_eResult==k_EResultLimitExceeded?
+                "Steam is rate limiting invite lobbies. Wait, then refresh.":
+                "Steam could not create the invite lobby (result "+std::to_string(int(event->m_eResult))+"). Refresh to retry.");return;
+        }
         invitation_lobby=CSteamID(event->m_ulSteamIDLobby);
         if(connect_data.empty()){clear_invite_lobby();return;}
         if(!SteamMatchmaking()->SetLobbyData(invitation_lobby,"connect",connect_data.c_str())) {
@@ -104,9 +108,15 @@ struct Steam final : Transport {
         }
         emit('p');
     }
+    void ensure_invite_lobby() {
+        if(!connect_data.empty()&&!invitation_lobby.IsValid()&&!creating_lobby) {
+            creating_lobby=true;
+            lobby_created.Set(SteamMatchmaking()->CreateLobby(k_ELobbyTypePrivate,4),this,&Steam::created);
+        }
+    }
     void social(char kind,const std::string& data) override {
         if(kind=='f') {
-            emit('f');
+            ensure_invite_lobby();emit('f');
             int count=SteamFriends()->GetFriendCount(k_EFriendFlagImmediate);
             for(int i=0;i<count;++i) {
                 auto id=SteamFriends()->GetFriendByIndex(i,k_EFriendFlagImmediate);
@@ -115,10 +125,7 @@ struct Steam final : Transport {
         } else if(kind=='p') {
             if(data.size()>512)throw std::runtime_error("Invite connect data too large");
             connect_data=data;clear_invite_lobby();
-            if(!data.empty()&&!creating_lobby) {
-                creating_lobby=true;
-                lobby_created.Set(SteamMatchmaking()->CreateLobby(k_ELobbyTypePrivate,4),this,&Steam::created);
-            }
+            ensure_invite_lobby();
         } else if(kind=='i') {
             CSteamID id(std::stoull(data));
             if(!invitation_lobby.IsValid()||connect_data.empty())emit('s',"Invite lobby is not ready. Try again.");
@@ -149,8 +156,8 @@ struct Steam final : Transport {
         SteamNetworkingUtils()->InitRelayNetworkAccess();
     }
     ~Steam() override {
-        lobby_created.Cancel();lobby_joined.Cancel();connect_data.clear();clear_invite_lobby();
-        social_event={};accept={};
+        social_event={};lobby_created.Cancel();lobby_joined.Cancel();
+        connect_data.clear();clear_invite_lobby();accept={};
         for(auto& [id,socket]:peers){socket->reset_callbacks();socket->close();}
         peers.clear();
         stop_listening();

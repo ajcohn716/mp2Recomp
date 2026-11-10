@@ -7,6 +7,7 @@
 #include <iterator>
 #include <atomic>
 #include <future>
+#include <algorithm>
 
 namespace {
 std::promise<std::string> lookup_result;
@@ -73,6 +74,45 @@ int main(int argc,char**argv){
  lookup_result.set_value("");lookup_result=std::promise<std::string>{};
  wait([&]{tick();click(250,264);return lookup_calls==5;});assert(host_address()=="127.0.0.1");
  lookup_result.set_value("93.184.216.37");expect_address("93.184.216.37");
+ // Steam friend picker pages by stable Steam ID, and incoming invites work
+ // with settings closed during a running game. These callbacks do not send mail
+ // or contact Steam; the real SDK filtering is checked by netplay_steam_test.
+ netplay::SteamSocialStatus social{.available=true,.invite_ready=true};
+ for(int i=0;i<10;++i)social.friends.push_back({"friend"+std::to_string(i),"Spacewar friend "+std::to_string(i)});
+ netplay::Status host{.code="MP2S-host",.slot=0,.players=1,.connected=true};
+ int refreshes=0,invites=0,accepts=0,dismisses=0;
+ std::string invited,accepted;
+ auto actions=[&]{return settings::NetplayActions{
+     .connect=[&](const auto& o){request=o;},.status=[&]{return host;},.lobby=true,
+     .steam_status=[&]{auto result=social;social.join_code.clear();return result;},
+     .refresh_friends=[&]{++refreshes;},
+     .invite_friend=[&](const auto& id){++invites;invited=id;},
+     .accept_invite=[&](const auto& id){++accepts;accepted=id;},
+     .dismiss_invite=[&](const auto& id){++dismisses;std::erase_if(social.invitations,[&](const auto& i){return i.id==id;});}
+ };};
+ auto social_tick=[&]{SDL_Delay(260);tick();};
+ settings::set_netplay(actions());tick();
+ click(260,314);assert(refreshes==1);click(620,224);assert(invites==1&&invited=="friend0");
+ click(190,560);click(620,264);assert(invites==2&&invited=="friend9");
+ click(40,602);assert(refreshes==2);click(650,134);
+ // The picker is unavailable for guests, full/running rooms, and Direct TCP.
+ auto unavailable=[&]{settings::set_netplay(actions());tick();click(260,314);click(620,224);assert(invites==2);};
+ host.slot=1;unavailable();host.slot=0;host.players=4;unavailable();host.players=1;
+ host.running=true;unavailable();host.running=false;host.code="MP2-direct";unavailable();host.code="MP2S-host";
+ // Arrival surfaces the inbox even during play with settings closed.
+ host.running=true;settings::set_netplay(actions());tick();settings::toggle();assert(!settings::visible());request.reset();
+ social.invitations.push_back({"lobby1","Friend one"});social_tick();assert(settings::visible());
+ click(510,224);assert(accepts==1&&accepted=="lobby1"&&!request);
+ click(510,224);assert(accepts==1); // no duplicate requests while joining
+ social.join_code="MP2S-invited-room";social_tick();assert(request&&request->code=="MP2S-invited-room"&&dismisses==1);
+ request.reset();social.invitations.push_back({"lobby2","Friend two"});social_tick();
+ click(650,224);assert(dismisses==2&&!request&&accepts==1);social_tick();
+ social.invitations.push_back({"lobby3","Friend three"});social_tick();click(510,224);assert(accepts==2);
+ social.join_code="unrelated-spacewar-game";social_tick();assert(!request);
+ // A repeated failure must release the pending state on every retry.
+ for(int i=0;i<2;++i){click(510,224);social.message="Invite expired";++social.message_revision;social_tick();}
+ assert(accepts==4&&!request);
+ settings::set_netplay({});
  // Focus is cleared on tab switches and F1 isn't captured as a binding.
  click(40,90);click(250,240);key(SDL_SCANCODE_ESCAPE);assert(settings::visible());
  SDL_Event quit{};quit.type=SDL_QUIT;assert(!settings::event(quit));

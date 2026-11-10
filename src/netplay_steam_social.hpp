@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,7 @@ struct SteamSocialStatus {
     std::vector<SteamFriend> friends;
     std::vector<SteamInvitation> invitations;
     std::string message, join_code;
+    uint64_t message_revision{};
 };
 // Shares one standalone helper with the Steam transport. Startup runs away
 // from the UI thread; status and commands never wait for Steam initialization.

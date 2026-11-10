@@ -69,7 +69,7 @@ struct Service {
                         view.invitations.push_back({id,name});
                     }
                 } else if(record.kind=='p')view.invite_ready=record.data=="1";
-                else if(record.kind=='s')view.message=std::move(record.data);
+                else if(record.kind=='s'){view.message=std::move(record.data);++view.message_revision;}
                 else if(record.kind=='r')view.join_code=std::move(record.data);
                 else {
                     if(!attached)continue;
@@ -217,7 +217,12 @@ SteamSocialStatus SteamSocial::status() {
     auto result=state->helper->view;
     state->helper->view.join_code.clear();return result;
 }
-void SteamSocial::refresh(){state->command('f');}
+void SteamSocial::refresh(){
+    if(!state->ready()&&!state->pending.valid()) {
+        state->error.clear();state->pending=std::async(std::launch::async,transport::service);return;
+    }
+    state->command('f');
+}
 void SteamSocial::invite(const std::string& id){state->command('i',id);}
 void SteamSocial::accept(const std::string& id){state->command('j',id);}
 void SteamSocial::dismiss(const std::string& id) {
