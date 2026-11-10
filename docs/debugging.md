@@ -1,7 +1,45 @@
-# Local debugging
+# Find logs, record problems, and replay a session
+
+[Back to the README](../README.md) · [Build from source](building.md)
+
+You can collect logs and record a problem during normal play. The command-line
+and checkpoint tools below are useful when you need a repeatable test or want
+to inspect a rendering issue.
+
+## Quick start: record a problem
+
+1. Launch the game normally and get to the problem.
+2. Press **F8** to record the **next 15 seconds** of frames and audio. Reproduce
+   the problem during that time; this does not capture what already happened.
+3. Open `userdata/debug/` in the game directory. `latest.json` points to the
+   newest session, which contains the logs and numbered capture folders.
+
+When reporting a problem, describe the build and operating system, the steps
+that trigger it, and what you expected to happen. Logs can contain private room
+codes. Frames and audio contain game content; review artifacts before sharing
+and keep them out of source commits.
+
+## Recording details
+
+**F8** records the next **15 seconds**, at a target of **10 PNG frames/second**,
+plus stereo PCM16 WAV audio. No recorder or FFmpeg installation is required.
+Each capture creates a numbered folder with a manifest. Audio is captured after
+volume/mute adjustment, before the SDL queue; a sample-rate change starts a new
+WAV segment. WAV headers update during recording to retain usable data after a
+crash. Captures are forward recordings, not a rolling history.
+
+Frames are copied from the Vulkan presentation surface, including aspect-ratio
+bars. They do not include window decorations or the settings window. Encoding
+runs on a bounded background queue (64 MiB); dropped frames/errors are reported.
+Actual frame times are authoritative: the target rate can fall with a slow game,
+GPU or encoder. GPU capture can affect timing and is off outside recordings.
+Headless mode supports audio/logs but cannot produce screenshots or PNG frames.
+
+## Where logs are saved
 
 Every normal launch writes a private session under `userdata/debug/` (or
-`--data-dir PATH/debug`). Override it with `--debug-dir PATH`. `latest.json`
+`PATH/debug/` when launched with `--data-dir PATH`). Override it with
+`--debug-dir PATH`. `latest.json`
 points to the newest session; use an explicit session when running several
 instances. No debug network port is opened.
 
@@ -19,28 +57,24 @@ connection codes. Frames/audio contain your local game's content and are ignored
 by Git along with saves and generated game code. Don't publish those artifacts
 as source changes.
 
-## Player controls
+## Control a running game from a terminal
 
-**F8** records the next **15 seconds**, at a target of **10 PNG frames/second**,
-plus stereo PCM16 WAV audio. No recorder or FFmpeg installation is required.
-Each capture creates a numbered folder with a manifest. Audio is captured after
-volume/mute adjustment, before the SDL queue; a sample-rate change starts a new
-WAV segment. WAV headers update during recording to retain usable data after a
-crash. Captures are forward recordings, not a rolling history.
+The examples use a source checkout. Run commands from the repository root, with
+Python available as `python` (or substitute `python3`). For an installed build,
+launch `./play` on Linux or `mp2recomp.exe` on Windows with the same game flags.
+Run the client from a source checkout and use `--root` to select the installed
+game's `userdata/debug` directory.
 
-Frames are copied from the Vulkan presentation surface, including aspect-ratio
-bars. They do not include window decorations or the settings window. Encoding
-runs on a bounded background queue (64 MiB); dropped frames/errors are reported.
-Actual frame times are authoritative: the target rate can fall with a slow game,
-GPU or encoder. GPU capture can affect timing and is off outside recordings.
-Headless mode supports audio/logs but cannot produce screenshots or PNG frames.
-
-## AI / command-line workflow
-
-Enable local control explicitly:
+Start the game in one terminal:
 
 ```sh
 ./run.sh --debug-controls --auto-start 650
+```
+
+Leave it running. In a second terminal, inspect status, take a screenshot, or
+record a capture:
+
+```sh
 python tools/debug_client.py status
 python tools/debug_client.py screenshot
 python tools/debug_client.py capture --seconds 15 --fps 10 --wait
@@ -50,13 +84,20 @@ python tools/debug_client.py input --x -1 --frames 4
 python tools/debug_client.py quit
 ```
 
-The client prints JSON, including absolute artifact paths. Its `--root PATH`
-selects a custom debug root; `--session PATH` pins a specific running session.
+The client prints JSON, including absolute artifact paths. Put global options
+before the command: `--root PATH` selects a custom debug root and `--session PATH`
+pins a specific running session. For example:
+
+```sh
+python tools/debug_client.py --root "/path/to/mp2recomp/userdata/debug" status
+```
+
 Inspect the screenshot and its `.png.json` sidecar before choosing the next
 input. An accepted input command schedules a press; allow the game's animation
 or dialogue to finish before taking the next screenshot. Start = `0x1000`,
 A = `0x8000`, B = `0x4000`; analog axes are -1..1 with positive Y pointing up.
-Input injection is disabled in netplay/probes and while restoring a checkpoint. Physical input still works.
+Input injection is disabled in netplay/probes and while restoring a checkpoint.
+Physical input still works.
 
 For repeatable navigation, save a JSON array of input commands with `at_vi`
 (absolute VI tick), `frames`, `buttons`, `x`, and `y`, then submit it near boot:
@@ -67,32 +108,24 @@ python tools/debug_client.py script /path/to/local-inputs.json
 
 Use generous spacing for scene transitions and the same ROM/save/settings.
 This schedules controller input. For loadable states with verified gameplay replay,
-use checkpoint mode below. `--frames N` bounds the run.
+use [checkpoint mode](#save-and-replay-checkpoints) below. `--frames N` bounds the run.
 
-The protocol is intentionally filesystem based so both humans and models can
-use it without an HTTP dependency or authentication setup. Write a command to
-`commands/UNIQUE.tmp`, then atomically rename it to `commands/UNIQUE.json`.
-The app polls every 100 ms and writes `responses/UNIQUE.json`, with `ok` plus
-results or an `error`. Commands are limited to 16 KiB. Supported `op` values:
-`status`, `screenshot`, `capture` (`seconds`: 1..60, `fps`: 1..30), `stop_capture`,
-`input` (`frames`: 1..3600, 16-bit `buttons`, axes -1..1, optional `at_vi`),
-`trace`, `save_state`, `load_state` (`path`), `pause`, `step` (`frames`: 1..600),
-`resume`, and `quit`.
-Responses acknowledge scheduling. A screenshot is ready when its PNG and JSON
-sidecar exist; check frame errors in the event log. A capture finishes at its
-deadline or on `stop_capture`; queued encodes may complete afterward.
-`trace` writes the next graphics task's interpreted command stream (up to 16,384
-commands, current task microcode), including framebuffer/scissor context. It is a
-local artifact for inspecting rendering issues. Tasks can switch microcodes;
-commands dispatched through another microcode map are not included.
-No arbitrary memory writes, shell execution or remote control are exposed.
+## Save and replay checkpoints
 
-## Capture and load states
+Checkpoints let you return to a recorded input boundary. They replay the session
+from boot, so loading takes roughly as long as reaching that point originally.
+They work offline and must be enabled when you launch the game.
 
-Start **offline checkpoint mode from boot**:
+Start checkpoint mode in one terminal:
 
 ```sh
 ./run.sh --debug-checkpoints
+```
+
+In a second terminal, save a checkpoint, then load the path returned by
+`save_state` (replace the example path):
+
+```sh
 python tools/debug_client.py save_state
 python tools/debug_client.py load_state /absolute/path/to/state-ID.json --wait
 python tools/debug_client.py screenshot
@@ -126,6 +159,37 @@ Capture mode must have been enabled when the session started; arbitrary older
 sessions cannot retroactively produce loadable states. Checkpoints are private
 local JSON files, not distributable source assets.
 
+## If a command fails
+
+| Problem | What to check |
+| --- | --- |
+| Missing `latest.json` | Launch the game first, then check the client working directory or pass `--root` before the command. |
+| No response | Launch with `--debug-controls` or `--debug-checkpoints`. Make sure you selected a live session; older sessions cannot answer commands. |
+| Screenshots fail in headless mode | Use a working display and Vulkan driver. Headless mode supports audio and logs, but no PNG captures. |
+| A checkpoint will not load | Use the same ROM and compatible game/runtime code. Inspect `events.jsonl` for a replay mismatch. |
+| Scripted input has no effect | Input injection is disabled in netplay, probes, and during checkpoint restore. Allow animations and dialogues time to finish. |
+
+## Command protocol reference
+
+You can use `tools/debug_client.py` without working with the protocol directly.
+Custom tools can use the filesystem protocol without an HTTP dependency or
+authentication setup. Write a command to
+`commands/UNIQUE.tmp`, then atomically rename it to `commands/UNIQUE.json`.
+The app polls every 100 ms and writes `responses/UNIQUE.json`, with `ok` plus
+results or an `error`. Commands are limited to 16 KiB. Supported `op` values:
+`status`, `screenshot`, `capture` (`seconds`: 1..60, `fps`: 1..30), `stop_capture`,
+`input` (`frames`: 1..3600, 16-bit `buttons`, axes -1..1, optional `at_vi`),
+`trace`, `save_state`, `load_state` (`path`), `pause`, `step` (`frames`: 1..600),
+`resume`, and `quit`.
+Responses acknowledge scheduling. A screenshot is ready when its PNG and JSON
+sidecar exist; check frame errors in the event log. A capture finishes at its
+deadline or on `stop_capture`; queued encodes may complete afterward.
+`trace` writes the next graphics task's interpreted command stream (up to 16,384
+commands, current task microcode), including framebuffer/scissor context. It is a
+local artifact for inspecting rendering issues. Tasks can switch microcodes;
+commands dispatched through another microcode map are not included.
+No arbitrary memory writes, shell execution or remote control are exposed.
+
 ## Verification
 
 With your local ROM and native build:
@@ -146,7 +210,7 @@ The render test needs a working display and Vulkan driver. All outputs stay in
 `build/`. Windows code paths are supported by the source but require verification
 on a Windows machine.
 
-## Pirate Land border regression
+## Renderer notes: Pirate Land border regression
 
 The board's background uses 64x48 photo blocks split into 32- and 16-row strips,
 with coordinates biased by half a pixel. The pinned RT64 rectangle viewport

@@ -29,6 +29,8 @@ ALLOWED = {
     "tests/netplay_steam_test.cpp",
     "tools/test_game_netplay.py",
     "docs/netplay.md",
+    "docs/installation.md",
+    "docs/building.md",
 
     ".gitignore",
     "install.py",

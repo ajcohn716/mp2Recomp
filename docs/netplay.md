@@ -1,9 +1,39 @@
-# Steam and direct room multiplayer
+# Play with friends
 
-Experimental deterministic input netplay for two to four players using the
-supported Mario Party 2 USA ROM. Each player runs the game locally and owns one
-N64 controller port. The host distributes agreed input frames. Steam P2P is the
-default transport; Direct TCP is also available for LAN play and local tests.
+[Back to the README](../README.md) · [Installation](installation.md) · [Build from source](building.md)
+
+Multiplayer (netplay) is experimental and supports two to four players. Each
+person runs the game locally with their own supported Mario Party 2 USA ROM and
+controls one N64 controller port. Use matching builds; the game checks source
+compatibility before letting a player join.
+
+## Choose a connection method
+
+| Method | What you need | Setup |
+| --- | --- | --- |
+| Direct TCP on a LAN | Installer or source build; host's LAN address | [Direct room steps](#direct-tcp-rooms); no router forwarding needed |
+| Direct TCP over the internet | Installer or source build; host's public address and TCP port forwarding | [Direct room steps](#direct-tcp-rooms) |
+| Steam | A source build with the separate Steamworks SDK; Steam running for every player | [Steam room steps](#steam-rooms); no port forwarding needed |
+
+**Installer dependency packs do not include Steamworks.** If Steam is unavailable
+in your build, choose **Direct TCP** or follow [Build with Steamworks](#build-with-steamworks).
+Steam is the default transport in Steam-enabled builds.
+
+Creating or joining a room restarts the game into a lobby. Finish or save your
+offline game first; it cannot be continued online. Everyone must join before
+the host starts. Online saves are kept separate from offline saves.
+
+## What to expect in a room
+
+The host is player 1; guests receive ports 2–4 in join order. Unoccupied ports
+report disconnected. Creating or joining during offline play restarts the game
+into the lobby; an offline game cannot be continued online. Every player joins
+before boot. Late joining, reconnecting, spectators and host migration are not
+supported. Disconnects and detected state mismatches stop the session.
+
+Each player's normal keyboard/controller bindings apply to their assigned port.
+Settings suppress that player's input while the game continues. The game still
+chooses human/CPU players through its own menus.
 
 ## Steam rooms
 
@@ -13,7 +43,7 @@ Steamworks uses **Spacewar App ID 480 permanently**, including standalone
 launches. This project does not require a Steam store launch or a different
 production App ID. There is no automatic App ID migration or replacement step.
 
-1. Open **F1 > Netplay**, or launch `./run.sh --netplay` (installed Linux:
+1. Open **F1 → Netplay**, or launch `./run.sh --netplay` (installed Linux:
    `./play --netplay`; Windows: `mp2recomp.exe --netplay`).
 2. Leave **Transport: Steam (App ID 480)** selected and click **Create room**.
 3. Click **Copy code** and share the complete `MP2S-...` code privately.
@@ -29,30 +59,27 @@ Steam identity and a fresh random session key. Networking uses
 service, and Steam Datagram Relay support. Both sides use virtual port **0**;
 TCP port settings do not apply. Valve's Steam service is required.
 
-Command-line examples:
+Command-line examples from a source checkout:
 
 ```sh
 ./run.sh --netplay --netplay-transport steam
 ./run.sh --join 'MP2S-PASTE_THE_FULL_CODE_HERE'
 ```
 
-The host is player 1; guests receive ports 2–4 in join order. Unoccupied ports
-report disconnected. Creating or joining during offline play restarts the game
-into the lobby; an offline game cannot be continued online. Every player joins
-before boot. Late joining, reconnecting, spectators and host migration are not
-supported. Disconnects and detected state mismatches stop the session.
-
-Each player's normal keyboard/controller bindings apply to their assigned port.
-Settings suppress that player's input while the game continues. The game still
-chooses human/CPU players through its own menus.
-
 ## Direct TCP rooms
 
-Select **Transport: Direct TCP** in the Netplay tab. The host forwards TCP port
-**7777** to their gaming computer and allows it through their firewall. Enter the
-host's public IP or DNS name, click **Create room**, then share the `MP2-...` code.
-Use the host's LAN IP for LAN play, or `127.0.0.1` for processes on one computer.
-Guests paste the code; they do not need to forward a port. Steam is not used.
+1. Open **F1 → Netplay** and select **Transport: Direct TCP**.
+2. On the host, enter the address guests will use: the host's LAN IP for the same
+   network, public IP or DNS name for the internet, or `127.0.0.1` for tests on
+   one computer.
+3. For internet play, forward TCP port **7777** on the host's router to the gaming
+   computer. Allow the chosen port through the host's firewall. Guests do not
+   need to forward ports. LAN play does not need router forwarding.
+4. The host clicks **Create room**, then shares the complete `MP2-...` code privately.
+5. Guests paste it into **Join with a connection code** and click **Join room**.
+   When everyone is connected, the host clicks **Start game**.
+
+Steam is not used for Direct TCP rooms.
 
 Direct mode can make a background HTTPS request to
 `https://ipv4.icanhazip.com/` to prefill the public IPv4 address. Only that service
@@ -109,11 +136,24 @@ the host address. Diagnostic logs contain codes and should stay private. Startin
 a new room generates a new key. Codes expire when the host leaves; session codes
 are never used as save-directory names.
 
+## If someone cannot connect
+
+| Symptom | What to check |
+| --- | --- |
+| Steam is unavailable | Use a Steam-enabled source build, or select Direct TCP. Starting Steam alone does not enable support in an SDK-free build. |
+| Steam initialization fails | Start Steam, sign in, and run it as the same OS user as the game. Each remote player needs their own account and computer. |
+| Direct TCP works on LAN but not over the internet | Check the public address, host firewall, and TCP forwarding. External/internal ports must match. Carrier-grade NAT can prevent hosting. |
+| Public-IP detection fails or shows a VPN address | Enter the reachable host address manually; detection does not configure your router. |
+| Build mismatch | Use matching game builds and supported ROMs on every computer. |
+| Cannot join a game already in progress | Create a new room and have everyone join before starting. Late joining and reconnecting are not supported. |
+| A session stalls or stops | Missing input can stall play; disconnects or detected state mismatches stop it. Keep logs private because they can contain room codes. |
+
 ## Build with Steamworks
 
-Obtain the Steamworks SDK (validated with version 1.65) from Valve and extract it outside tracked source (for
-example `build/steamworks-sdk`). It must contain `public/steam/steam_api.h` and
-`redistributable_bin`. No SDK headers or binaries are committed or fetched by
+First complete the [source-build prerequisites and code generation](building.md).
+Obtain the Steamworks SDK (validated with version 1.65) from Valve and extract
+it outside tracked source, for example `build/steamworks-sdk`. It must contain
+`public/steam/steam_api.h` and `redistributable_bin`. No SDK headers or binaries are committed or fetched by
 `tools/bootstrap.py`. The SDK is an explicit local build input, separate from
 the project's open-source dependency pack.
 
@@ -142,7 +182,18 @@ this repository's source license.
 
 ## Tests
 
-The transport tests need neither a ROM nor Vulkan:
+Run these from the repository root. The Direct TCP transport tests need neither
+a ROM nor Vulkan, and do not require Steam or its SDK:
+
+```sh
+python tools/bootstrap.py
+cmake -S . -B build/netplay -G Ninja -DMP2_NETPLAY_ONLY=ON \
+  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+cmake --build build/netplay --target netplay_test -j 4
+./build/netplay/netplay_test
+```
+
+To also test Steam, supply the SDK and run Steam signed in as the same OS user:
 
 ```sh
 python tools/bootstrap.py
@@ -159,7 +210,7 @@ cmake --build build/steam-netplay --target netplay_test netplay_steam_test -j 4
 asymmetric scheduling, common seed/save, desync detection, wrong keys, full rooms,
 late joining, slot reuse and disconnects. It also checks both invitation formats
 and cryptographic tamper/replay/wrong-key/reflection rejection. No external
-service is contacted. Omit the SDK path to test SDK-free builds.
+service is contacted. Use the first test recipe above for SDK-free builds.
 
 `netplay_steam_test` requires a running, signed-in Steam client. It exercises the
 real Steam API under App ID 480, creates a P2P listener and encrypted UDP loopback
@@ -201,8 +252,9 @@ The private test traces compare those checkpoints on every input frame.
 
 The port was a boot/title proof of concept before netplay. Four-client menu
 checks don't establish that every board or minigame works. Steam sessions across
-separate accounts/home networks, Linux/Windows cross-play, complete boards/minigames, long sessions and
-hostile-network soak testing still need validation. Rollback isn't implemented.
+separate accounts/home networks, Linux/Windows cross-play, complete
+boards/minigames, long sessions, and hostile-network soak testing still need
+validation. Rollback isn't implemented.
 
 Dependencies: [libdatachannel](https://github.com/paullouisageneau/libdatachannel)
 (MPL-2.0) and [OpenSSL](https://www.openssl.org/) retain their respective licenses.
