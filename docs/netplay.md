@@ -41,13 +41,25 @@ chooses human/CPU players through its own menus.
 Install version 0.2.1 or use a source build with the helper. Start Steam and sign in before creating
 or joining a room. Each player needs a separate Steam account and computer.
 This alpha uses the **Spacewar test App ID 480**, including standalone launches.
-Steam may display the session as Spacewar.
+Steam may display the session as Spacewar. Friend invitations require matching
+game and protocol-2 helper builds from these sources; the older v0.2.1
+protocol-1 helper must be rebuilt or replaced.
 
 1. Open **F1 → Netplay**, or launch `./run.sh --netplay` (installed Linux:
    `./play --netplay`; Windows: `mp2recomp.exe --netplay`).
 2. Leave **Transport: Steam (App ID 480)** selected and click **Create room**.
-3. Click **Copy code** and share the complete `MP2S-...` code privately.
-4. Friends paste that code into **Join with a connection code**, then click
+3. Click **Invite friends** to see Steam friends currently playing **Spacewar
+   (App ID 480)**. Select **Invite** beside a friend. **Refresh friends** updates
+   the list; friends playing other games or with unavailable game activity are
+   excluded. Only the host can invite, before starting and while the room has space.
+4. Friends receive an in-game **Steam invitations** panel, including during
+   offline or netplay games. Click **Accept** to leave the current game/room and
+   join the invited room, or **Dismiss** to keep playing. Accepting during a game
+   restarts into the lobby; current game progress is not carried into the room.
+   **F1 → Netplay → Steam invites** reopens pending invitations. Steam's own
+   invite Join button also opens the in-game confirmation.
+   Alternatively, use **Copy code** and share the complete `MP2S-...` code
+   privately. Friends paste it into **Join with a connection code** and click
    **Join room**. The code automatically selects Steam regardless of their
    current transport selection.
 5. When everyone is connected, the host clicks **Start game**.
@@ -57,7 +69,10 @@ matchmaking backend is needed for Steam rooms. The code contains the host's
 Steam identity and a fresh random session key. Networking uses
 `ISteamNetworkingSockets::CreateListenSocketP2P` / `ConnectP2P`, Steam's rendezvous
 service, and Steam Datagram Relay support. Both sides use virtual port **0**;
-TCP port settings do not apply. Valve's Steam service is required.
+TCP port settings do not apply. Valve's Steam service is required. Invitations
+use a private Steam matchmaking lobby containing the room's connection code; it closes when the host starts or
+leaves. The existing authenticated P2P connection still carries game traffic.
+Expired invitations cannot join a started or closed room.
 
 Command-line examples from a source checkout:
 
@@ -79,7 +94,8 @@ Command-line examples from a source checkout:
 5. Guests paste it into **Join with a connection code** and click **Join room**.
    When everyone is connected, the host clicks **Start game**.
 
-Steam is not used for Direct TCP rooms.
+Direct TCP game traffic does not use Steam. The graphical game can still listen
+for Steam invitations while playing offline or over Direct TCP.
 
 Direct mode can make a background HTTPS request to
 `https://ipv4.icanhazip.com/` to prefill the public IPv4 address. Only that service
@@ -172,8 +188,12 @@ links Valve's runtime and includes SDK headers. The game talks to it through
 process pipes; no emulator or ROM-derived code is linked into the helper.
 Keep the helper and runtime files with the executable when moving a build.
 Initialization sets `SteamAppId` and `SteamGameId` to 480. Steam must run under
-the same OS user. The helper starts only when entering a Steam room; offline and
-Direct TCP play do not require Steam.
+the same OS user. The graphical game starts the helper asynchronously to receive
+invitations during play, and shares it with Steam netplay rooms. Offline and
+Direct TCP play still work if Steam or the helper is unavailable. Start Steam
+and use **Steam invites → Refresh Steam** to retry an initial connection failure.
+Headless automated games start the helper only if they need a Steam transport;
+interactive lobbies also listen for invitations.
 
 To build only the helper, without a ROM or emulator dependencies:
 
@@ -200,8 +220,9 @@ a ROM nor Vulkan, and do not require Steam or its SDK:
 python tools/bootstrap.py
 cmake -S . -B build/netplay -G Ninja -DMP2_NETPLAY_ONLY=ON \
   -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-cmake --build build/netplay --target netplay_test -j 4
+cmake --build build/netplay --target netplay_test netplay_steam_social_test -j 4
 ./build/netplay/netplay_test
+./build/netplay/netplay_steam_social_test
 ```
 
 To also test Steam, supply the SDK and run Steam signed in as the same OS user:
@@ -211,8 +232,9 @@ python tools/bootstrap.py
 cmake -S . -B build/steam-netplay -G Ninja -DMP2_NETPLAY_ONLY=ON \
   -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
   -DMP2_STEAMWORKS_SDK="$PWD/build/steamworks-sdk"
-cmake --build build/steam-netplay --target netplay_test netplay_steam_test -j 4
+cmake --build build/steam-netplay --target netplay_test netplay_steam_test netplay_steam_social_test -j 4
 ./build/steam-netplay/netplay_test
+./build/steam-netplay/netplay_steam_social_test
 ./build/steam-netplay/netplay_steam_test
 ./tools/test_settings.sh
 ```
@@ -223,8 +245,15 @@ late joining, slot reuse and disconnects. It also checks both invitation formats
 and cryptographic tamper/replay/wrong-key/reflection rejection. No external
 service is contacted. Use the first test recipe above for SDK-free builds.
 
+`netplay_steam_social_test` exercises the shared helper process protocol with a
+local fixture: asynchronous startup, friend/invite metadata, accepting and
+dismissing, socket routing during UI polls, and reuse across room changes. It
+requires neither Steam nor its SDK. The settings tests cover friend paging,
+host-only controls, in-game acceptance, dismissal, invalid replies and retries.
+
 `netplay_steam_test` requires a running, signed-in Steam client. It exercises the
-real Steam API under App ID 480, creates a P2P listener and encrypted UDP loopback
+real Steam API under App ID 480, checks the Spacewar friend filter, creates and
+clears a private invitation lobby, creates a P2P listener and encrypted UDP loopback
 pair, checks reliable text/binary ordering and bounds, and shuts down/reinitializes
 the API. It does not use a mock SDK. It does **not** simulate multiple Steam users
 or prove that a remote relay connection works.
