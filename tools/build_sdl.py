@@ -8,6 +8,21 @@ import subprocess
 
 ROOT=Path(__file__).resolve().parents[1]
 
+def install_sdl(prefix,cmake,patchelf,env):
+    prefix=Path(prefix).resolve();build=ROOT/'build/sdk-sdl'
+    subprocess.run([cmake,'--install',str(build),'--prefix',str(prefix)],env=env,check=True)
+    # The library must remain usable after SDK extraction and game installation.
+    library=prefix/'lib/libSDL2-2.0.so.0'
+    subprocess.run([patchelf,'--set-rpath','$ORIGIN',str(library.resolve())],env=env,check=True)
+    pc=prefix/'lib/pkgconfig/sdl2.pc'
+    lines=pc.read_text().splitlines()
+    pc.write_text('\n'.join('prefix=${pcfiledir}/../..' if line.startswith('prefix=') else line for line in lines)+'\n')
+    config=prefix/'bin/sdl2-config'
+    lines=config.read_text().splitlines()
+    config.write_text('\n'.join('prefix=$(CDPATH= cd -- \"$(dirname -- \"$0\")/..\" && pwd)' if line.startswith('prefix=') else line for line in lines)+'\n')
+    license_dir=prefix/'share/licenses/SDL2';license_dir.mkdir(parents=True,exist_ok=True)
+    shutil.copy2(ROOT/'SDL/LICENSE.txt',license_dir/'LICENSE.txt')
+
 def build_sdl(prefix,jobs='3'):
     prefix=Path(prefix).resolve()
     path=os.pathsep.join(str(prefix/p) for p in ('lib/pkgconfig','share/pkgconfig'))
@@ -27,15 +42,8 @@ def build_sdl(prefix,jobs='3'):
         '-DSDL_WAYLAND=ON','-DSDL_WAYLAND_SHARED=ON','-DSDL_WAYLAND_LIBDECOR=ON',
         '-DSDL_WAYLAND_LIBDECOR_SHARED=ON','-DSDL_X11=ON','-DSDL_VULKAN=ON'],env=env,check=True)
     subprocess.run([cmake,'--build',str(build),'-j',str(jobs)],env=env,check=True)
-    subprocess.run([cmake,'--install',str(build)],env=env,check=True)
-    # The library must remain usable after SDK extraction and game installation.
+    install_sdl(prefix,cmake,str(prefix/'bin/patchelf'),env)
     library=prefix/'lib/libSDL2-2.0.so.0'
-    subprocess.run([str(prefix/'bin/patchelf'),'--set-rpath','$ORIGIN',str(library.resolve())],env=env,check=True)
-    pc=prefix/'lib/pkgconfig/sdl2.pc'
-    lines=pc.read_text().splitlines()
-    pc.write_text('\n'.join('prefix=${pcfiledir}/../..' if line.startswith('prefix=') else line for line in lines)+'\n')
-    license_dir=prefix/'share/licenses/SDL2';license_dir.mkdir(parents=True,exist_ok=True)
-    shutil.copy2(ROOT/'SDL/LICENSE.txt',license_dir/'LICENSE.txt')
     probe='''import ctypes,json,sys
 sdl=ctypes.CDLL(sys.argv[1]);sdl.SDL_GetVideoDriver.restype=ctypes.c_char_p
 drivers=[sdl.SDL_GetVideoDriver(i).decode() for i in range(sdl.SDL_GetNumVideoDrivers())]

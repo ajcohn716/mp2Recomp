@@ -29,13 +29,17 @@ def main():
         copytree(python_root,stage/'python')
         python=stage/'python/python.exe'
     else:
-        from tools.build_sdl import build_sdl
+        from tools.build_sdl import build_sdl,install_sdl
         sdl_drivers=build_sdl(args.toolchain,args.jobs)
         packed=args.output/'conda-environment.tar.gz'
         subprocess.run([str(args.python),'-m','conda_pack.cli','-p',str(args.toolchain),'-o',str(packed),'--force'],check=True)
         (stage/'toolchain').mkdir(exist_ok=True)
         with tarfile.open(packed) as archive:archive.extractall(stage/'toolchain',filter='data')
         packed.unlink()
+        # conda-pack may source managed files from its package cache, restoring
+        # the original SDL. Install the verified build into the final pack last.
+        install_sdl(stage/'toolchain',str(args.toolchain/'bin/cmake'),str(args.toolchain/'bin/patchelf'),
+            dict(os.environ,LD_LIBRARY_PATH=str(args.toolchain/'lib')))
         python=stage/'toolchain/bin/python'
     sources=stage/'sources';sources.mkdir(exist_ok=True)
     for name in ('N64Recomp','runtime','rt64','directx-headers','libdatachannel','SDL'):copytree(ROOT/name,sources/name)
