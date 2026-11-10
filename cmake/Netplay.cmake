@@ -4,6 +4,12 @@ set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
 set(NO_TESTS ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(libdatachannel EXCLUDE_FROM_ALL)
+if(MINGW)
+    # This pinned upstream file uses std::transform without <algorithm>.
+    # libc++ in MSYS2 requires the direct include; keep the checkout unmodified.
+    set_property(SOURCE libdatachannel/src/configuration.cpp TARGET_DIRECTORY datachannel-static
+        APPEND PROPERTY COMPILE_OPTIONS -include algorithm)
+endif()
 # Reject incompatible authored game code before opening a session. Keep this
 # platform-neutral so the same sources can connect across Linux and Windows.
 file(GLOB NETPLAY_ID_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp" "${CMAKE_SOURCE_DIR}/src/*.hpp")
