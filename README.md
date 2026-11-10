@@ -1,0 +1,170 @@
+# Mario Party 2: native recompilation proof of concept
+
+The US ROM boots through the Nintendo/Hudson logos and the animated opening
+to the **Mario Party 2 title screen**. The game CPU code runs as statically
+recompiled native code; graphics use RT64 and OS services use N64ModernRuntime.
+
+This repository contains host-side integration source, configuration, and build
+scripts only. Supply your own US ROM to generate the game code locally. ROMs,
+assets, screenshots, memory dumps, Ghidra/decompiler output, generated symbol
+tables, generated game/microcode C, compiled binaries, and saves are excluded.
+
+## Run a local build
+
+From this directory:
+
+```sh
+./run.sh
+```
+
+Build first using the instructions below. No executable is distributed here.
+
+Press **Enter** to skip the opening and reach the title screen. For a repeatable
+title-screen boot with an automatic Start press after 650 VI ticks:
+
+```sh
+./run.sh --auto-start 650
+```
+
+The executable is `build/native/mp2recomp`. The launcher changes into the project
+directory so ROM and save paths resolve correctly. It requires your own
+US ROM named `Mario Party 2 (USA).z64`, with SHA-1
+`166eda1c05670d337e2c3f15a5db528ae1e5d6e3`. `--rom /path/to/file.z64`
+overrides its location; the runtime validates the ROM's XXH3 hash before use.
+
+Keyboard controls:
+
+| N64 input | Keyboard |
+| --- | --- |
+| Start | Enter |
+| A | X or Space |
+| B | C |
+| Z | Z |
+| Analog stick | Arrow keys |
+| L / R | Q / E |
+| C up / down / left / right | I / K / J / L |
+| Quit | Escape or close window |
+
+Only controller port 1 is connected. Saves and the runtime's ROM copy live in
+`userdata/`; the EEPROM file is `userdata/saves/mp2.us.bin`.
+
+## Rebuild
+
+This proof of concept targets Linux. It was built with Clang, CMake, Ninja,
+SDL2, GTK3 development libraries, and Vulkan on an AMD RX 7800 XT. The audio
+microcode implementation requires SSE4.1 on x86-64. Building other platforms
+requires replacing the POSIX fiber implementation and adapting the frontend.
+
+Dependencies and exact revisions are recorded in `dependencies.json`. To
+populate a fresh source directory without replacing existing checkouts:
+
+```sh
+python tools/bootstrap.py
+```
+
+Put the US ROM at the path above, then regenerate code and compile:
+
+```sh
+./tools/regenerate.sh
+cmake -S . -B build/native -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+cmake --build build/native --target mp2recomp -j 8
+```
+
+The generation script installs its Python dependencies in a local virtual
+environment, disassembles the ROM with Splat/spimdisasm, converts function
+boundaries to N64Recomp metadata, and recompiles CPU code and audio microcode.
+It writes diagnostic logs under `build/`. ROM contents and generated game C
+are local build inputs/outputs and are excluded by `.gitignore`.
+
+## Implementation
+
+* `mp2.syms.toml` contains 8,528 function symbols in 117 sections: entry,
+  main, and 115 overlays. `tools/generate_symbols.py` derives it from the
+  community decompilation's Splat map and full disassembly.
+* N64Recomp emits 8,405 C function definitions in 169 translation units.
+  OS functions use the runtime's native replacements; selected entry/process
+  routines have the host implementations described below.
+* `src/overlays.cpp` registers generated function tables. `src/platform.cpp`
+  wraps cartridge DMA so a newly loaded overlay updates native function
+  lookup. The boot-logo overlay begins at ROM `0x36D9A0`; the title/intro
+  overlay begins at `0x3D4D20`, both loaded at RAM `0x80102800`.
+* `src/process.cpp` replaces four Hudson process functions with POSIX
+  `ucontext` fibers. Each process keeps a native stack and a guest register
+  context, preserving suspension through nested recompiled calls. The
+  original scheduler's sleep, child-wait, priority-list order, and cleanup
+  behavior are retained. This avoids invalid native `setjmp`/`longjmp`
+  continuations after a C function has returned.
+* `src/overlays.cpp` also supplies the small entry wrapper: clear the original
+  BSS, establish the guest stack, and call the recompiled main routine.
+* `src/renderer.cpp` bridges graphics tasks and VI registers to RT64 at
+  original resolution and aspect ratio.
+* `aspMain.toml` recompiles the ROM's audio microcode at offset `0xBF560`,
+  size `0xE20`, IMEM address `0x1080`. Its 16 command targets come from the
+  original dispatch table at ROM `0xD2090`.
+* `src/main.cpp` supplies SDL audio and keyboard input. Audio length reporting
+  is bounded to the current simulated AI DMA instead of SDL's entire queue,
+  preventing unsigned buffer-size underflow during startup.
+
+Ghidra analysis was used locally to cross-check the process scheduler; overlay
+boundaries come from the community project. Ghidra projects, disassembly,
+decompiler output, and generated analysis files are not distributed here.
+
+## Validation and limits
+
+Validated on November 9, 2026:
+
+* CMake/Clang build completes; an immediate rebuild reports no work to do.
+* The native build passes the logos, renders the animated opening, accepts
+  an automatic Start input, and renders the title screen.
+* `SDL_VIDEODRIVER=x11 ./run.sh --frames 3000 --auto-start 650` runs for
+  3,000 VI ticks (about 50 seconds) and exits with status 0. No missing function,
+  RSP, or unsupported SDK errors occurred in that run. Logs and screenshots
+  remain local and are excluded from the repository.
+* A separate 1,500-VI run under GDB renders the opening and exits normally.
+* EEPROM initialization produces the expected 512-byte save with the
+  `HUDSON` header. Existing saves are reused on later runs.
+
+This is a boot/title proof of concept, not a validated full-game port.
+Boards, minigames, multiplayer, long sessions, and audio/graphics fidelity
+have not been comprehensively tested. Some title prompt glyphs appear as
+blocks during local testing and need further renderer investigation.
+There is no controller mapping UI, resizing configuration UI, or mod support
+exposed by this frontend.
+
+Two unused low-level SDK functions are stubbed in `mp2.toml`:
+`__LeoBootGame3` (64DD boot) and `func_8009D24C_9DE4C` (an exception/scheduler
+fragment). Additional unsupported 64DD/cop0 SDK entry points are explicit
+abort traps in `src/platform.cpp`. None were reached during the boot test.
+
+## Upstream work
+
+This work builds on these projects; their respective licenses and authorship
+remain applicable:
+
+* [Mario Party 2 decompilation](https://github.com/Rainchus/marioparty2)
+* [N64Recomp](https://github.com/N64Recomp/N64Recomp)
+* [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime)
+* [RT64](https://github.com/rt64/rt64)
+* [Zelda64Recomp](https://github.com/Zelda64Recomp/Zelda64Recomp), used as an
+  integration reference for the runtime and renderer interfaces
+* [Splat](https://github.com/ethteck/splat) and
+  [spimdisasm](https://github.com/Decompollaborate/spimdisasm)
+
+N64ModernRuntime is GPL-3.0 and RT64 is MIT; see the dependency license files.
+The generated game code and assets are not included as redistributable source.
+
+## Source-only repository check
+
+Before committing, stage only authored integration files and run:
+
+```sh
+python tools/audit_repository.py
+```
+
+The audit checks the Git index against an explicit publication allowlist and
+rejects binary content, oversized files, symlinks, generated game code markers,
+and ROM-derived assembly/decompiler output. New authored files must be reviewed
+and added to that allowlist before they can pass. It does not replace source
+review for provenance.

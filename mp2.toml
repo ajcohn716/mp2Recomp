@@ -1,0 +1,14 @@
+[input]
+entrypoint = 0x80000400
+output_func_path = "RecompiledFuncs"
+symbols_file_path = "mp2.syms.toml"
+rom_file_path = "Mario Party 2 (USA).z64"
+functions_per_output_file = 50
+
+[patches]
+stubs = ["__LeoBootGame3", "func_8009D24C_9DE4C"]
+ignored = [
+  "recomp_entrypoint",
+  "mp2_setjmp", "mp2_longjmp",
+  "HuPrcCall", "HuPrcSleep", "HuPrcChildWatch", "HuPrcTerminate",
+]
