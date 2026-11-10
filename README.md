@@ -1,7 +1,7 @@
 # Mario Party 2 Recompiled
 
 [Downloads](https://github.com/ajcohn716/mp2Recomp/releases) ·
-[Release notes](docs/releases/v0.2.1.md) · [GPLv3 or later](LICENSE)
+[Release notes](docs/releases/v0.2.2.md) · [GPLv3 or later](LICENSE)
 
 A native PC recompilation of **Mario Party 2** for Linux and Windows x86-64.
 The US game boots through the logos and animated opening to the title screen.
@@ -86,7 +86,8 @@ while settings are open, but game input is suppressed.
 - **Graphics:** change render resolution (original, 2x–4x, or fit window), aspect
   ratio (4:3, 16:9, or fit window), fullscreen, and output filtering while playing.
 - **Netplay:** create or join a room, copy its connection code, see connected
-  players, and start or leave the session. See [multiplayer setup](docs/netplay.md).
+  players, invite Steam friends, accept invitations during play, and start or
+  leave the session. See [multiplayer setup](docs/netplay.md).
 
 Settings save automatically in `userdata/settings.cfg`. **Reset defaults**
 restores the current Input, Audio, or Graphics page. Offline play uses controller
@@ -97,7 +98,7 @@ settings and progress.
 ## Play with friends (experimental)
 
 Two to four players can share a room, each using their own supported ROM and a
-matching build. **Version 0.2.1 installers include Steam and Direct TCP support.**
+matching build. **Version 0.2.2 installers include Steam and Direct TCP support.**
 Players do not need the Steamworks SDK.
 
 Open **F1 → Netplay**. For LAN play, choose **Direct TCP** and use the host's LAN
@@ -105,8 +106,10 @@ address. Internet Direct TCP hosts also need port forwarding. Steam-enabled
 builds use the **Spacewar test App ID 480** and require each player to run Steam, signed in
 on their own account and computer.
 
-Creating or joining a room restarts the game into a lobby. The host shares the
-connection code privately and starts when everyone has joined. Online saves are
+Creating or joining a room restarts the game into a lobby. The host invites
+friends currently playing Spacewar or shares the connection code privately,
+then starts when everyone has joined. Friends can receive and accept invites
+while playing offline; they do not need to host a room. Online saves are
 separate from offline saves. Cross-account Steam sessions, separate home networks,
 full boards/minigames, and Linux/Windows cross-play still need validation.
 Follow the [multiplayer guide](docs/netplay.md) for the complete steps and limits.

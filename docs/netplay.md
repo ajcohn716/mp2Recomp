@@ -13,9 +13,9 @@ compatibility before letting a player join.
 | --- | --- | --- |
 | Direct TCP on a LAN | Installer or source build; host's LAN address | [Direct room steps](#direct-tcp-rooms); no router forwarding needed |
 | Direct TCP over the internet | Installer or source build; host's public address and TCP port forwarding | [Direct room steps](#direct-tcp-rooms) |
-| Steam | Version 0.2.1 installer or a source build with the helper; Steam running for every player | [Steam room steps](#steam-rooms); no port forwarding needed |
+| Steam | Version 0.2.2 installer or a source build with the helper; Steam running for every player | [Steam room steps](#steam-rooms); no port forwarding needed |
 
-**Version 0.2.1 installers include Steam support.** Players need Steam installed,
+**Version 0.2.2 installers include Steam support.** Players need Steam installed,
 running and signed in; they do not need the Steamworks SDK. Source developers can
 [build the standalone helper](#build-with-steamworks) separately. Steam is the
 default transport; Direct TCP remains available without Steam.
@@ -38,11 +38,11 @@ chooses human/CPU players through its own menus.
 
 ## Steam rooms
 
-Install version 0.2.1 or use a source build with the helper. Start Steam and sign in before creating
+Install version 0.2.2 or use a source build with the helper. Start Steam and sign in before creating
 or joining a room. Each player needs a separate Steam account and computer.
 This alpha uses the **Spacewar test App ID 480**, including standalone launches.
 Steam may display the session as Spacewar. Friend invitations require matching
-game and protocol-2 helper builds from these sources; the older v0.2.1
+v0.2.2 game and protocol-2 helper builds; the older v0.2.1
 protocol-1 helper must be rebuilt or replaced.
 
 1. Open **F1 → Netplay**, or launch `./run.sh --netplay` (installed Linux:
@@ -156,7 +156,7 @@ are never used as save-directory names.
 
 | Symptom | What to check |
 | --- | --- |
-| Steam helper unavailable | Reinstall version 0.2.1 with its matching dependency pack, keep the helper/runtime files together, or select Direct TCP. |
+| Steam helper unavailable | Reinstall version 0.2.2 with its matching dependency pack, keep the helper/runtime files together, or select Direct TCP. |
 | Steam initialization fails | Start Steam, sign in, and run it as the same OS user as the game. Each remote player needs their own account and computer. |
 | Direct TCP works on LAN but not over the internet | Check the public address, host firewall, and TCP forwarding. External/internal ports must match. Carrier-grade NAT can prevent hosting. |
 | Public-IP detection fails or shows a VPN address | Enter the reachable host address manually; detection does not configure your router. |

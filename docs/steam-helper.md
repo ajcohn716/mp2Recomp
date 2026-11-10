@@ -6,7 +6,7 @@ ROM, SDL, N64ModernRuntime, or other emulator components. Only this executable
 links Valve's proprietary runtime. The GPL game launches it on demand and
 communicates through pipes; no game objects or memory are shared.
 
-The v0.2.1 installer includes the compiled helper and the appropriate runtime
+The v0.2.2 installer includes the compiled helper and the appropriate runtime
 library. Players need Steam running and signed in, but no Steamworks SDK.
 The graphical game starts it asynchronously to receive invitations during play;
 offline and Direct TCP play still work without it. Steam networking and the

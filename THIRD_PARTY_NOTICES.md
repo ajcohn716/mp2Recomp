@@ -22,7 +22,7 @@ and their recursive submodules for development builds.
 | Splat | MIT | https://github.com/ethteck/splat |
 | spimdisasm | MIT | https://github.com/Decompollaborate/spimdisasm |
 
-Version 0.2.1 installers include a standalone `mp2recomp-steam-helper` process and
+Version 0.2.2 installers include a standalone `mp2recomp-steam-helper` process and
 Valve's `steam_api64.dll` (Windows) or `libsteam_api.so` (Linux). The helper's
 authored source and shared generic transport/protocol headers are MIT-licensed;
 see LICENSE-STEAM-HELPER for the exact scope. It links only Valve's runtime and

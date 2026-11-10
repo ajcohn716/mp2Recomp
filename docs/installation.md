@@ -85,7 +85,7 @@ Game code and audio microcode are generated and compiled on your computer.
 Installation still takes time: this is a local build, not just file extraction.
 No ROM, generated game code, or game assets are sent to the cloud build.
 
-Version 0.2.1 includes Steam support automatically. No Steamworks SDK download
+Version 0.2.2 includes Steam friends and in-game invitations automatically. No Steamworks SDK download
 or development headers are needed by players. Install Steam separately, start it,
 and sign in before using **F1 → Netplay → Steam**. Each player needs their own
 Steam account and computer. Offline and Direct TCP play work without Steam.
@@ -99,7 +99,7 @@ See [multiplayer setup](netplay.md).
 | Dependency pack missing or rejected | Use the matching SDK from the same release, keep it compressed beside the installer, or select it in advanced options. |
 | Installation fails during compilation | Keep the installer log, retry with fewer compiler jobs, and reuse the same build/cache directory. |
 | Game will not open a graphics window | Check that your graphics driver supports Vulkan. On Linux, the video self-test below can help identify the display backend. |
-| Steam helper missing or damaged | Reinstall using the complete v0.2.1 archive and matching dependency pack. Keep the installed helper and its runtime files together. |
+| Steam helper missing or damaged | Reinstall using the complete v0.2.2 archive and matching dependency pack. Keep the installed helper and its runtime files together. |
 | Steam initialization fails | Start Steam and sign in under the same OS user as the game, or choose Direct TCP. |
 | Need logs after a crash | Look in `userdata/debug/` inside the game directory; see [debugging](debugging.md). Logs can contain private room codes. |
 
@@ -146,3 +146,8 @@ reuse requires matching runtime and Steam-helper recipes; v0.2 SDKs cannot be
 used for v0.2.1. `tools/build_dependency_pack.py` requires `--steamworks-sdk PATH`
 when building release packs locally. The GPL game communicates with the helper
 over process pipes and does not link Valve's runtime.
+
+Version 0.2.2 requires freshly rebuilt SDKs with the protocol-2 Steam helper.
+Do not reuse v0.2.1 SDK artifacts: the game and helper protocol must match.
+The graphical game initializes Steam at launch, so friends playing offline
+can receive invitations without creating their own room.
