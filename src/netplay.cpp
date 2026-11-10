@@ -203,6 +203,7 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
         for(int i=0;i<4;++i)if(bool(members&(1<<i))!=roster[i])throw std::runtime_error("Start roster mismatch");
         auto initial=decode_save(j.at("save"));auto seed_value=j.at("seed").get<uint64_t>();
         if(seed_value>UINT32_MAX)throw std::runtime_error("Invalid random seed");
+        if(hosting&&options.transport==Transport::Steam)wire->social('p',"");
         running=true;
         std::lock_guard lock(mutex);mask=members;rng_seed=uint32_t(seed_value);save=std::move(initial);
         for(unsigned f=0;f<delay;++f)frames[f]=Pads{};
@@ -261,6 +262,7 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
                 invite={wire->host_address(options.address),options.port,crypto::random_key(),options.transport==Transport::Steam};
                 invite.port=wire->listen(options.address,options.port,callback([](State& s,std::shared_ptr<transport::Socket> socket){s.attach(std::move(socket));}));
                 auto code=crypto::invitation(invite);
+                if(options.transport==Transport::Steam)wire->social('p',code);
                 slot=0;roster[0]=true;
                 std::lock_guard lock(mutex);view.connected=true;view.slot=0;view.players=1;view.ready[0]=true;view.code=code;
                 view.message=options.transport==Transport::Steam?"Steam room ready (App ID 480). Share the code; no port forwarding needed.":"Share the code. Forward TCP port "+std::to_string(invite.port)+" for internet play.";

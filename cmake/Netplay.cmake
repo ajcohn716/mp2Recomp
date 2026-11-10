@@ -30,6 +30,8 @@ target_include_directories(mp2_netplay PUBLIC src PRIVATE "${CMAKE_BINARY_DIR}" 
 target_link_libraries(mp2_netplay PUBLIC LibDataChannel::LibDataChannelStatic Threads::Threads OpenSSL::Crypto)
 add_executable(netplay_test tests/netplay_test.cpp)
 target_link_libraries(netplay_test PRIVATE mp2_netplay)
+add_executable(netplay_steam_social_test tests/netplay_steam_social_test.cpp)
+target_link_libraries(netplay_steam_social_test PRIVATE mp2_netplay)
 
 # The GPL game talks to a standalone MIT service over framed process streams.
 # Only that separate service links Valve's runtime; SDK headers stay build-only.

@@ -33,6 +33,11 @@ struct Transport {
     virtual std::string host_address(const std::string& configured) const { return configured; }
     virtual std::shared_ptr<Socket> socket() = 0;
     virtual void poll() = 0;
+    virtual void stop_listening() {}
+    // Optional generic friend/lobby service; lowercase helper records.
+    std::function<void(char, std::string)> social_event;
+    virtual void social(char, const std::string&) {}
+
 };
 std::unique_ptr<Transport> direct();
 std::unique_ptr<Transport> steam();

@@ -48,6 +48,88 @@ struct Steam final : Transport {
     std::function<void(std::shared_ptr<Socket>)> accept;
     std::map<HSteamNetConnection,std::shared_ptr<SteamSocket>> peers;
     static thread_local Steam* current;
+    CSteamID invitation_lobby;
+    std::string connect_data;
+    bool creating_lobby{};
+    CCallResult<Steam,LobbyCreated_t> lobby_created;
+    CCallResult<Steam,LobbyEnter_t> lobby_joined;
+    CCallback<Steam,LobbyInvite_t> lobby_invite{this,&Steam::invited};
+    CCallback<Steam,GameLobbyJoinRequested_t> lobby_requested{this,&Steam::join_requested};
+    void emit(char kind,std::string data={}) {if(social_event)social_event(kind,std::move(data));}
+    static std::string persona(CSteamID id) {
+        std::string name=SteamFriends()->GetFriendPersonaName(id);
+        for(auto& c:name)if(static_cast<unsigned char>(c)<32)c=' ';
+        return name.substr(0,128);
+    }
+    bool eligible(CSteamID id) {
+        FriendGameInfo_t game{};
+        return SteamFriends()->GetFriendRelationship(id)==k_EFriendRelationshipFriend &&
+            SteamFriends()->GetFriendGamePlayed(id,&game) && game.m_gameID==CGameID(steam_app_id);
+    }
+    void invited(LobbyInvite_t* event) {
+        if(CGameID(event->m_ulGameID)!=CGameID(steam_app_id)||
+           SteamFriends()->GetFriendRelationship(CSteamID(event->m_ulSteamIDUser))!=k_EFriendRelationshipFriend)return;
+        emit('v',std::to_string(event->m_ulSteamIDLobby)+"\n"+persona(CSteamID(event->m_ulSteamIDUser)));
+    }
+    void join_requested(GameLobbyJoinRequested_t* event) {
+        // Steam's Join button also opens the in-game confirmation.
+        if(SteamFriends()->GetFriendRelationship(event->m_steamIDFriend)==k_EFriendRelationshipFriend)
+            emit('v',std::to_string(event->m_steamIDLobby.ConvertToUint64())+"\n"+persona(event->m_steamIDFriend));
+    }
+    void created(LobbyCreated_t* event,bool failed) {
+        creating_lobby=false;
+        if(failed||event->m_eResult!=k_EResultOK){emit('s',"Steam could not create the invite lobby. Try again.");return;}
+        invitation_lobby=CSteamID(event->m_ulSteamIDLobby);
+        if(connect_data.empty()){clear_invite_lobby();return;}
+        if(!SteamMatchmaking()->SetLobbyData(invitation_lobby,"connect",connect_data.c_str())) {
+            clear_invite_lobby();emit('s',"Steam could not publish the invite. Try again.");return;
+        }
+        emit('p',"1");
+    }
+    void joined(LobbyEnter_t* event,bool failed) {
+        CSteamID lobby(event->m_ulSteamIDLobby);
+        if(failed||event->m_EChatRoomEnterResponse!=k_EChatRoomEnterResponseSuccess) {
+            emit('s',"Invite expired or room unavailable.");return;
+        }
+        std::string code=SteamMatchmaking()->GetLobbyData(lobby,"connect");
+        if(lobby!=invitation_lobby)SteamMatchmaking()->LeaveLobby(lobby);
+        if(code.empty()||code.size()>512)emit('s',"Invite expired or room unavailable.");
+        else emit('r',std::move(code));
+    }
+    void clear_invite_lobby() {
+        if(invitation_lobby.IsValid()) {
+            SteamMatchmaking()->SetLobbyJoinable(invitation_lobby,false);
+            SteamMatchmaking()->DeleteLobbyData(invitation_lobby,"connect");
+            SteamMatchmaking()->LeaveLobby(invitation_lobby);invitation_lobby.Clear();
+        }
+        emit('p');
+    }
+    void social(char kind,const std::string& data) override {
+        if(kind=='f') {
+            emit('f');
+            int count=SteamFriends()->GetFriendCount(k_EFriendFlagImmediate);
+            for(int i=0;i<count;++i) {
+                auto id=SteamFriends()->GetFriendByIndex(i,k_EFriendFlagImmediate);
+                if(eligible(id))emit('g',std::to_string(id.ConvertToUint64())+"\n"+persona(id));
+            }
+        } else if(kind=='p') {
+            if(data.size()>512)throw std::runtime_error("Invite connect data too large");
+            connect_data=data;clear_invite_lobby();
+            if(!data.empty()&&!creating_lobby) {
+                creating_lobby=true;
+                lobby_created.Set(SteamMatchmaking()->CreateLobby(k_ELobbyTypePrivate,4),this,&Steam::created);
+            }
+        } else if(kind=='i') {
+            CSteamID id(std::stoull(data));
+            if(!invitation_lobby.IsValid()||connect_data.empty())emit('s',"Invite lobby is not ready. Try again.");
+            else if(!eligible(id))emit('s',"That friend is no longer playing Spacewar. Refresh the list.");
+            else emit('s',SteamMatchmaking()->InviteUserToLobby(invitation_lobby,id)?"Steam invite sent":"Steam could not send the invite. Try again.");
+        } else if(kind=='j') {
+            CSteamID id(std::stoull(data));
+            if(!id.IsLobby()){emit('s',"Invalid Steam lobby invitation");return;}
+            lobby_joined.Set(SteamMatchmaking()->JoinLobby(id),this,&Steam::joined);
+        } else throw std::runtime_error("Unknown Steam social command");
+    }
     Steam() {
         if(!lease.owns_lock())throw std::runtime_error("Leave the current Steam room before opening another.");
 #ifdef _WIN32
@@ -58,7 +140,7 @@ struct Steam final : Transport {
         if(!SteamAPI_Init())throw std::runtime_error("Steam initialization failed (App ID 480). Start Steam and sign in under the same OS user.");
         initialized=true;
         if(!SteamUser()||!SteamUser()->BLoggedOn()||!SteamUtils()||SteamUtils()->GetAppID()!=steam_app_id||
-           !(api=SteamNetworkingSockets())||!SteamNetworkingUtils()) {
+           !(api=SteamNetworkingSockets())||!SteamNetworkingUtils()||!SteamFriends()||!SteamMatchmaking()) {
             SteamAPI_Shutdown();initialized=false;
             throw std::runtime_error("Steam must be online with networking available under App ID 480.");
         }
@@ -67,10 +149,11 @@ struct Steam final : Transport {
         SteamNetworkingUtils()->InitRelayNetworkAccess();
     }
     ~Steam() override {
-        accept={};
+        lobby_created.Cancel();lobby_joined.Cancel();connect_data.clear();clear_invite_lobby();
+        social_event={};accept={};
         for(auto& [id,socket]:peers){socket->reset_callbacks();socket->close();}
         peers.clear();
-        if(listener)api->CloseListenSocket(listener);
+        stop_listening();
         if(group)api->DestroyPollGroup(group);
         if(initialized){SteamAPI_ReleaseCurrentThreadMemory();SteamAPI_Shutdown();}
     }
@@ -94,6 +177,10 @@ struct Steam final : Transport {
         listener=api->CreateListenSocketP2P(0,int(options.size()),options.data());
         if(!listener)throw std::runtime_error("Could not create Steam P2P room");
         return 1; // invitation format requires nonzero port; Steam uses virtual port 0
+    }
+    void stop_listening() override {
+        accept={};if(listener)api->CloseListenSocket(listener);listener=0;
+        connect_data.clear();clear_invite_lobby();
     }
     std::string host_address(const std::string&) const override {
         return std::to_string(SteamUser()->GetSteamID().ConvertToUint64());
@@ -127,6 +214,7 @@ struct Steam final : Transport {
         }
     }
     void poll() override {
+        SteamAPI_RunCallbacks();
         current=this;api->RunCallbacks();current=nullptr;
         for(auto& [id,socket]:peers) {
             if(socket->pending_close&&socket->on_close){socket->pending_close=false;socket->on_close();}

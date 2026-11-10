@@ -18,6 +18,23 @@ int main() try {
         bool rejected=false;try{auto duplicate=steam();}catch(...){rejected=true;}
         require(rejected,"Overlapping Steam API owners accepted");
         require(!room.host_address("").empty(),"Missing host Steam identity");
+        int listed=0;bool invite_ready=false;
+        room.social_event=[&](char kind,std::string data){
+            if(kind=='g') {
+                CSteamID id(std::stoull(data.substr(0,data.find('\n'))));
+                require(room.eligible(id),"Friend list included someone outside Spacewar");++listed;
+            }
+            if(kind=='p')invite_ready=data=="1";
+        };
+        room.social('f',"");
+        require(listed<=SteamFriends()->GetFriendCount(k_EFriendFlagImmediate),"Duplicate friends");
+        room.social('p',"opaque-test-connect-data");
+        auto lobby_deadline=std::chrono::steady_clock::now()+20s;
+        while(!invite_ready&&std::chrono::steady_clock::now()<lobby_deadline){room.poll();std::this_thread::sleep_for(1ms);}
+        require(invite_ready,"Private Steam invite lobby creation failed");
+        require(std::string(SteamMatchmaking()->GetLobbyData(room.invitation_lobby,"connect"))=="opaque-test-connect-data","Missing invitation connect data");
+        room.social('p',"");require(!invite_ready&&!room.invitation_lobby.IsValid(),"Invite lobby survived room closure");
+        room.social_event={};
         require(room.listen("",0,[](auto){})==1,"Steam listener creation failed");
         auto first=std::static_pointer_cast<SteamSocket>(room.socket());
         auto second=std::static_pointer_cast<SteamSocket>(room.socket());
@@ -55,6 +72,6 @@ int main() try {
         first->reset_callbacks();second->reset_callbacks();first->close();second->close();
         require(!first->is_open()&&!second->is_open(),"Steam close failed");
     }
-    std::cout<<"PASS: real Steam App ID 480, P2P listener, encrypted UDP loopback, reliable text/binary ordering, bounds, shutdown/reinitialize\n";
+    std::cout<<"PASS: real Steam App ID 480, Spacewar friend filter, private invite lobby, P2P listener, encrypted UDP loopback, reliable text/binary ordering, bounds, shutdown/reinitialize\n";
     return 0;
 } catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}

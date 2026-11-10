@@ -20,7 +20,7 @@ int main(int argc,char** argv){
         FILE* file=tmpfile();if(!file)return 1;
         write(file,{'B',42,std::string("a\0b",3)});rewind(file);Record record;
         bool ok=read(file,record)&&record.kind=='B'&&record.peer==42&&record.data==std::string("a\0b",3);
-        fclose(file);std::cout<<"Steam helper protocol 1; App ID 480; standalone MIT service\n";return ok?0:1;
+        fclose(file);std::cout<<"Steam helper protocol 2; App ID 480; standalone MIT service\n";return ok?0:1;
     }
     if(argc!=2||std::strcmp(argv[1],"--stdio")!=0){
         std::cout<<"Usage: mp2recomp-steam-helper --stdio | --self-test\n"
@@ -49,11 +49,17 @@ int main(int argc,char** argv){
                 else {auto& bytes=std::get<Binary>(message);write(output,{'B',id,std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size())});}
             };
         };
-        write(output,{'H',0,"1:"+network->host_address("")});inbox->start(stdin);
+        network->social_event=[&](char kind,std::string data){write(output,{kind,0,std::move(data)});};
+        write(output,{'H',0,"2:"+network->host_address("")});inbox->start(stdin);
         bool quit=false;
         while(!quit){
             for(auto& command:inbox->take()){
                 if(command.kind=='Q'){quit=true;break;}
+                if(command.kind=='f'||command.kind=='p'||command.kind=='i'||command.kind=='j'){network->social(command.kind,command.data);continue;}
+                if(command.kind=='U'){
+                    for(auto& [id,socket]:peers){socket->reset_callbacks();socket->close();}peers.clear();
+                    network->stop_listening();write(output,{'U',command.peer,{}});continue;
+                }
                 if(command.kind=='L'){
                     network->listen("",0,[&](std::shared_ptr<Socket> socket){
                         if(peers.size()>=16){socket->close();return;}
