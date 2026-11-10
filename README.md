@@ -17,6 +17,9 @@ tables, generated game/microcode C, compiled binaries, and saves are excluded.
 The `Installer release` GitHub Actions workflow builds a self-contained Qt
 installer and a matching dependency pack for each platform. These contain the
 Python interpreter, compiler, build tools and open-source runtime dependencies.
+The SDK also contains precompiled RT64, N64ModernRuntime and networking
+dependency libraries. Installation reuses these libraries while generating and
+compiling all ROM-derived CPU code and audio microcode on the player's computer.
 Players do not need to install Python, Visual Studio, MSYS2 or development
 packages. A working graphics driver with Vulkan support is still required.
 The Windows version is a testing candidate until installation and game boot
@@ -57,9 +60,22 @@ GitHub Actions workflow. Each installer archive includes its matching offline
 SDK. Tagged `v*` builds prepare a draft release for verification before publication.
 Manual workflow runs also provide downloadable Actions artifacts.
 No ROM, generated game code or game assets are sent to the cloud build.
+Only explicitly allowlisted open-source dependency archives are packaged in the
+runtime library set; game and compiled fixture code are excluded. Before
+packaging, a fresh ROM-free consumer build must link the libraries, pass its
+self-tests, and compile no dependency objects. The installer checks the runtime
+recipe, archive checksums and compiler/platform compatibility before using them.
 For installer-only changes, workflow dispatch can reuse a verified SDK run via
 `sdk_run_id`. Its dependency pins and toolchain
 recipe must match; leave the field blank to rebuild both SDKs.
+The first release with precompiled runtime libraries must rebuild both SDKs;
+older SDK artifacts cannot be reused by the release packager.
+
+This hybrid build reduces installation work without distributing ROM-derived
+game code. A local compiler is still required and bundled, so installation still
+includes game-code generation, compilation and linking. It is not an
+extraction-only installer. Explicitly supplied older SDKs without precompiled
+libraries retain the full local build path.
 
 A developer checkout can use existing system dependencies instead:
 `python install.py --source-build --rom "/path/to/game.z64"`, or add `--gui`.
