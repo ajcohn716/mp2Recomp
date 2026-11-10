@@ -6,6 +6,7 @@ import sys
 # Deliberately enumerate the reviewed publication surface. No broad glob may
 # accidentally admit a ROM, asset, dependency checkout, or generated code.
 ALLOWED = {
+    "AGENTS.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "docs/releases/v0.1.md",
