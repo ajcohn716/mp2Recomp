@@ -17,14 +17,17 @@ code. Code generation and joining don't require third-party infrastructure.
    or router DHCP reservation so the forwarding rule stays valid.
 2. Find your router's public IP address yourself, or use a DNS name you control
    that points to it. The app doesn't discover your public address externally.
-3. Launch `./run.sh --netplay` (installed Linux: `./play --netplay`; Windows:
-   `mp2recomp.exe --netplay`). Enter that public IP/DNS name and TCP port.
+3. Press **F1**, select **Netplay**, and enter that public IP/DNS name and TCP
+   port. You can also open this tab before boot with `./run.sh --netplay`
+   (installed Linux: `./play --netplay`; Windows: `mp2recomp.exe --netplay`).
 4. Click **Create room**, then **Copy code**. Share the whole `MP2-...` code
    privately with friends. It grants access to this session.
 5. When everyone is connected, click **Start game**. The host is player 1;
    guests get ports 2–4 in join order. Unoccupied ports report disconnected.
 
-Guests launch with `--netplay`, paste the code and click **Join room**. They don't
+Guests open **F1 > Netplay** (or launch with `--netplay`), paste the code and
+click **Join room**. Creating or joining during offline play restarts the game
+into the lobby; the current offline game cannot be continued online. They don't
 need to forward a port, run a service, or enter a separate address. The address
 fields are for creating a room; joining reads the address from the code.
 

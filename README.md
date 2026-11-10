@@ -102,6 +102,7 @@ Keyboard controls:
 | Quit | Escape or close window |
 
 Press **F1** to open the settings window, or launch with `./run.sh --settings`.
+Settings are organized into **Input**, **Audio**, **Graphics**, and **Netplay** tabs.
 Click a keyboard/controller binding and press its replacement input; Escape
 cancels a binding capture. Select a connected SDL-compatible controller, adjust
 its left-stick deadzone, or choose keyboard-only input. Devices can be plugged
@@ -109,10 +110,18 @@ in while the game is running. Arrow keys always control the analog stick.
 
 Master volume, left/right channel levels, and mute are applied to the game audio.
 Settings save automatically in `userdata/settings.cfg`; Reset defaults restores
-bindings, volume and deadzone. Escape or Done closes settings. Game input is
+the current page (bindings/deadzone, audio, or graphics). Existing settings files
+are loaded automatically. Escape or Done closes settings. Game input is
 suppressed while settings is open; the game simulation continues. The settings
 window uses Segoe UI/Arial on Windows and Noto Sans/DejaVu Sans on Linux.
 Run `./tools/test_settings.sh` for the headless settings integration check.
+
+The Graphics tab applies render resolution (original, 2x–4x, or fit window),
+aspect ratio (4:3, 16:9, or fit window), fullscreen, and output filtering live.
+The Netplay tab lets you create a room with a host address/port or paste a
+friend's connection code to join. Creating or joining from offline play restarts
+the game into the room lobby so everyone boots from the same state. Copy the
+code, check connected players, and start or leave the room from that same tab.
 
 Offline play connects controller port 1. Saves and the runtime's ROM copy live in
 `userdata/`; the EEPROM file is `userdata/saves/mp2.us.bin`.
@@ -213,7 +222,7 @@ This is a boot/title proof of concept, not a validated full-game port.
 Boards, minigames, multiplayer, long sessions, and audio/graphics fidelity
 have not been comprehensively tested. Some title prompt glyphs appear as
 blocks during local testing and need further renderer investigation.
-There is no resizing configuration UI or mod support exposed by this frontend.
+No mod support is exposed by this frontend.
 
 Two unused low-level SDK functions are stubbed in `mp2.toml`:
 `__LeoBootGame3` (64DD boot) and `func_8009D24C_9DE4C` (an exception/scheduler

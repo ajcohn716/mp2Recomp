@@ -13,6 +13,12 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <optional>
+#include <cerrno>
+#include <cstring>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #include "librecomp/game.hpp"
 #include "librecomp/overlays.hpp"
 
@@ -24,6 +30,19 @@ extern RspUcodeFunc aspMain;
 std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_null_renderer(uint8_t*, ultramodern::renderer::WindowHandle, bool);
 
 namespace {
+#ifdef _WIN32
+std::wstring quote_argument(const std::wstring& value) {
+    std::wstring result=L"\"";
+    size_t slashes=0;
+    for(wchar_t c:value) {
+        if(c==L'\\'){++slashes;continue;}
+        result.append(c==L'"'?slashes*2+1:slashes,L'\\');
+        result+=c;slashes=0;
+    }
+    result.append(slashes*2,L'\\');
+    return result+L'"';
+}
+#endif
 void configure_bundled_runtime() {
 #ifndef _WIN32
     char* base=SDL_GetBasePath();
@@ -48,6 +67,7 @@ std::atomic<size_t> last_audio_frames{};
 unsigned quit_after{};
 unsigned auto_start_at{};
 bool headless{};
+std::optional<netplay::Options> requested_room;
 void set_frequency(uint32_t rate) {
     if (audio_device) SDL_CloseAudioDevice(audio_device);
     SDL_AudioSpec spec{};
@@ -120,7 +140,7 @@ int main(int argc, char** argv) try {
 #ifdef _WIN32
     if(char* base=SDL_GetBasePath()) { std::filesystem::current_path(std::filesystem::u8path(base));SDL_free(base); }
 #endif
-    bool open_settings = false, multiplayer = false, bot = false;
+    bool open_settings = false, multiplayer = false, bot = false, connect_immediately = false;
     unsigned probe = 0, stop_frame = 0, auto_players = 0;
     netplay::Options network;
     std::filesystem::path data_directory = "userdata", trace;
@@ -130,6 +150,7 @@ int main(int argc, char** argv) try {
         auto argument = std::string_view(argv[i]);
         auto value = [&]() -> const char* { if(i+1>=argc) throw std::runtime_error("Missing value for " + std::string(argument)); return argv[++i]; };
         if (argument == "--netplay" || argument == "--host") multiplayer = true;
+        else if (argument == "--netplay-connect") { multiplayer = true; connect_immediately = true; }
         else if (argument == "--join") { multiplayer = true; network.code = value(); }
         else if (argument == "--host-address") network.address = value();
         else if (argument == "--host-port") { auto port = std::stoul(value()); if (port == 0 || port > 65535) throw std::runtime_error("Host port must be 1..65535"); network.port = uint16_t(port); }
@@ -154,6 +175,7 @@ int main(int argc, char** argv) try {
     if (probe && multiplayer) throw std::runtime_error("Use either a local probe or multiplayer");
     if ((probe || multiplayer) && auto_start_at) throw std::runtime_error("Use --netplay-bot for deterministic automated inputs");
     auto config_dir = std::filesystem::absolute(data_directory);
+    settings::init(config_dir);
     std::unique_ptr<netplay::Session> session;
     if (multiplayer) {
         std::vector<uint8_t> host_save;
@@ -174,8 +196,8 @@ int main(int argc, char** argv) try {
                 }
                 SDL_PumpEvents(); std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
-        } else session = netplay::lobby(network, host_save);
-        if (!session) { SDL_Quit(); return 0; }
+        } else session = netplay::lobby(network, host_save, connect_immediately);
+        if (!session) { settings::shutdown(); SDL_Quit(); return 0; }
         config_dir /= "netplay/session-p" + std::to_string(session->status().slot + 1) + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
         std::filesystem::create_directories(config_dir / "saves");
         auto initial = session->initial_save();
@@ -193,7 +215,13 @@ int main(int argc, char** argv) try {
     if (session) SDL_SetWindowTitle(window, ("Mario Party 2 | Netplay | Player " + std::to_string(session->status().slot + 1)).c_str());
     std::filesystem::create_directories(config_dir);
     recomp::register_config_path(config_dir);
-    settings::init(std::filesystem::absolute(data_directory));
+    settings::set_game_window(window);
+    if (session) settings::set_netplay({.status=[&]{return session->status();}});
+    else if (!probe) settings::set_netplay({.connect=[](const netplay::Options& options){
+        netplay::validate_options(options);
+        requested_room=options;
+        ultramodern::quit();
+    }},network);
     if (open_settings) settings::toggle();
     register_mp2_overlays();
     recomp::register_game({
@@ -235,6 +263,37 @@ int main(int argc, char** argv) try {
     if (session && netplay::game::failed() && !headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Multiplayer session ended", session->status().message.c_str(), window);
     settings::shutdown();
     SDL_DestroyWindow(window);
+    // The runtime has process-global simulation/thread state. Replace the
+    // process after orderly shutdown to boot a synchronized room from frame 0.
+    if (requested_room) {
+        char* base=SDL_GetBasePath();
+        auto executable=base?std::filesystem::path(base)/std::filesystem::path(argv[0]).filename():std::filesystem::absolute(argv[0]);
+        SDL_free(base);
+        std::vector<std::string> arguments{executable.string(),"--netplay-connect","--rom",std::filesystem::absolute(rom).string(),
+            "--data-dir",std::filesystem::absolute(data_directory).string(),"--host-address",requested_room->address,
+            "--host-port",std::to_string(requested_room->port)};
+        if(!requested_room->code.empty()){arguments.push_back("--join");arguments.push_back(requested_room->code);}
+        if(headless)arguments.push_back("--headless");
+        if(bot)arguments.push_back("--netplay-bot");
+        if(stop_frame){arguments.push_back("--netplay-frames");arguments.push_back(std::to_string(stop_frame));}
+        SDL_Quit();
+#ifdef _WIN32
+        std::wstring command;
+        for(const auto& arg:arguments){if(!command.empty())command+=L' ';command+=quote_argument(std::filesystem::path(arg).wstring());}
+        STARTUPINFOW startup{};startup.cb=sizeof(startup);
+        PROCESS_INFORMATION child{};
+        if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&startup,&child))
+            throw std::runtime_error("Cannot open netplay lobby: "+std::system_category().message(GetLastError()));
+        CloseHandle(child.hThread);CloseHandle(child.hProcess);
+        return 0;
+#else
+        std::vector<char*> pointers;
+        for(auto& arg:arguments)pointers.push_back(arg.data());
+        pointers.push_back(nullptr);
+        execv(executable.c_str(),pointers.data());
+#endif
+        throw std::runtime_error(std::string("Cannot open netplay lobby: ")+std::strerror(errno));
+    }
     SDL_Quit();
     return netplay::game::failed() ? 1 : 0;
 } catch (const std::exception& e) {

@@ -1,4 +1,5 @@
 #include <memory>
+#include "settings.hpp"
 #include "hle/rt64_application.h"
 #include "hle/rt64_rsp.h"
 #include "ultramodern/ultramodern.hpp"
@@ -10,6 +11,18 @@ void check_interrupts() {}
 
 class MP2Renderer final : public ultramodern::renderer::RendererContext {
     std::unique_ptr<RT64::Application> app;
+    settings::Graphics applied;
+    void configure_graphics() {
+        applied=settings::graphics();
+        using Config=RT64::UserConfiguration;
+        app->userConfig.resolution=applied.resolution==0?Config::Resolution::WindowIntegerScale:
+            applied.resolution==1?Config::Resolution::Original:Config::Resolution::Manual;
+        app->userConfig.resolutionMultiplier=std::max(1,applied.resolution);
+        app->userConfig.aspectRatio=applied.aspect==0?Config::AspectRatio::Original:
+            applied.aspect==1?Config::AspectRatio::Manual:Config::AspectRatio::Expand;
+        app->userConfig.aspectTarget=16.0/9.0;
+        app->userConfig.filtering=static_cast<Config::Filtering>(applied.filtering);
+    }
 public:
     MP2Renderer(uint8_t* rdram, ultramodern::renderer::WindowHandle window) {
         RT64::Application::Core core{};
@@ -41,8 +54,7 @@ public:
         config.useConfigurationFile = false;
         app = std::make_unique<RT64::Application>(core, config);
         app->userConfig.graphicsAPI = RT64::UserConfiguration::GraphicsAPI::Vulkan;
-        app->userConfig.resolution = RT64::UserConfiguration::Resolution::Original;
-        app->userConfig.aspectRatio = RT64::UserConfiguration::AspectRatio::Original;
+        configure_graphics();
         app->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Original;
         auto result = app->setup(
 #ifdef _WIN32
@@ -60,6 +72,7 @@ public:
     bool update_config(const ultramodern::renderer::GraphicsConfig&, const ultramodern::renderer::GraphicsConfig&) override { return false; }
     void enable_instant_present() override {}
     void send_dl(const OSTask* task) override {
+        if(applied!=settings::graphics()){configure_graphics();app->updateUserConfig(true);}
         static unsigned count = 0;
         if (++count <= 5 || count % 300 == 0) fprintf(stderr, "[MP2] graphics task %u, dl=%08x\n", count, task->t.data_ptr);
         app->state->rsp->reset();
@@ -70,7 +83,7 @@ public:
     void update_screen() override { app->updateScreen(); }
     void shutdown() override { if (app) app->end(); }
     uint32_t get_display_framerate() const override { return 60; }
-    float get_resolution_scale() const override { return 1.0f; }
+    float get_resolution_scale() const override { return float(std::max(1,applied.resolution)); }
 };
 }
 std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_renderer(uint8_t* rdram, ultramodern::renderer::WindowHandle window, bool) {

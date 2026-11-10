@@ -18,6 +18,8 @@ struct Options {
     uint16_t port = 7777; // host forwards this TCP port to their computer
     std::string code; // empty creates a room
 };
+// Validate fields without opening a socket or ending an offline game.
+void validate_options(const Options&);
 struct Status {
     std::string code, message;
     int slot{-1}, players{};
@@ -45,5 +47,5 @@ private:
 };
 const char* build_id();
 // SDL launcher. Returns null when cancelled; --netplay skips offline play.
-std::unique_ptr<Session> lobby(const Options&, const std::vector<uint8_t>& host_save);
+std::unique_ptr<Session> lobby(const Options&, const std::vector<uint8_t>& host_save, bool connect_immediately = false);
 }

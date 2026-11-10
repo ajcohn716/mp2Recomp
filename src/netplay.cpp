@@ -296,9 +296,12 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
         connections.clear();
     }
 };
-Session::Session(const Options& options):state(std::make_shared<State>()){
+void validate_options(const Options& options){
     if(options.code.empty())crypto::invitation({options.address,options.port?options.port:uint16_t(1),{}});
     else crypto::parse_invitation(options.code);
+}
+Session::Session(const Options& options):state(std::make_shared<State>()){
+    validate_options(options);
     state->options=options;state->view.message="Connecting directly to host...";
     state->worker=std::thread([s=state]{s->run();});
 }

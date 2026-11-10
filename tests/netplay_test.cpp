@@ -16,9 +16,13 @@ void crypto_checks() {
     using namespace netplay::crypto;
     auto secret=random_key(), client=random_key(), host=random_key();
     auto code=invitation({"127.0.0.1",7777,secret});auto invite=parse_invitation(code);
+    netplay::validate_options({"127.0.0.1",7777,""});
+    netplay::validate_options({"127.0.0.1",7777,code});
     require(invite.key==secret && invite.address=="127.0.0.1" && invite.port==7777,"Invitation round trip");
     for(const auto& invalid:{std::string("garbage"),code+"=",std::string("MP2-A")}) {
         bool rejected=false;try{parse_invitation(invalid);}catch(...){rejected=true;}require(rejected,"Malformed code accepted");
+        rejected=false;try{netplay::validate_options({"127.0.0.1",7777,invalid});}catch(...){rejected=true;}
+        require(rejected,"Invalid code accepted before game restart");
     }
     Channel sender,receiver;sender.initialize(secret,client,host,false);receiver.initialize(secret,client,host,true);
     auto record=sender.seal("controller inputs");require(receiver.open(record)=="controller inputs","Encryption round trip");
