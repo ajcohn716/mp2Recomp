@@ -21,6 +21,12 @@ set(RT64_SDL_WINDOW_VULKAN ON CACHE BOOL "" FORCE)
 add_subdirectory(rt64)
 add_subdirectory(runtime)
 if(MINGW)
+    target_include_directories(plume BEFORE PUBLIC
+        ${CMAKE_SOURCE_DIR}/directx-headers/include
+        ${CMAKE_SOURCE_DIR}/directx-headers/include/directx
+        ${CMAKE_SOURCE_DIR}/directx-headers/include/dxguids)
+    target_compile_definitions(plume PUBLIC D3D12MA_USING_DIRECTX_HEADERS)
+    target_sources(plume PRIVATE ${CMAKE_SOURCE_DIR}/directx-headers/src/dxguids.cpp)
     get_target_property(RT64_LINKS rt64 LINK_LIBRARIES)
     list(TRANSFORM RT64_LINKS REPLACE "^delayimp.lib$" "delayimp")
     set_property(TARGET rt64 PROPERTY LINK_LIBRARIES "${RT64_LINKS}")

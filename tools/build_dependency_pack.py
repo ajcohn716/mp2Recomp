@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Build a redistributable SDK from open-source tools; never reads a game ROM."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tarfile
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from tools.dependency_pack import sha256
+ROOT=Path(__file__).resolve().parents[1]
+
+def main():
+    p=argparse.ArgumentParser();p.add_argument('--toolchain',type=Path,required=True);p.add_argument('--python',type=Path,required=True)
+    p.add_argument('--platform',required=True);p.add_argument('--output',type=Path,default=ROOT/'dist');p.add_argument('--jobs',default='3');args=p.parse_args()
+    args.output=args.output.resolve();args.output.mkdir(parents=True,exist_ok=True)
+    stage=args.output/'sdk-stage';stage.mkdir(exist_ok=True)
+    def copytree(source,target):
+        shutil.copytree(source,target,dirs_exist_ok=True,symlinks=True,ignore=shutil.ignore_patterns('.git','.github','build','.venv','__pycache__'))
+    windows=args.platform.startswith('windows')
+    # Linux's conda-pack contains relocation records and third-party licenses.
+    if windows:
+        copytree(args.toolchain,stage/'toolchain')
+        python_root=args.python.parent
+        copytree(python_root,stage/'python')
+        python=stage/'python/python.exe'
+    else:
+        packed=args.output/'conda-environment.tar.gz'
+        subprocess.run([str(args.python),'-m','conda_pack','-p',str(args.toolchain),'-o',str(packed),'--force'],check=True)
+        (stage/'toolchain').mkdir(exist_ok=True)
+        with tarfile.open(packed) as archive:archive.extractall(stage/'toolchain',filter='data')
+        python=stage/'toolchain/bin/python'
+    sources=stage/'sources';sources.mkdir(exist_ok=True)
+    for name in ('N64Recomp','runtime','rt64','directx-headers'):copytree(ROOT/name,sources/name)
+    decomp=sources/'decomp';decomp.mkdir(exist_ok=True)
+    for name in ('marioparty2.yaml','symbol_addrs.txt'):shutil.copy2(ROOT/'decomp'/name,decomp/name)
+    # Preserve license files and package metadata; only game metadata is taken
+    # from the decomp project. No decompiled C, assembly, assets or ROMs are packed.
+    suffix='.exe' if windows else ''
+    tools={'python':str(python.relative_to(stage)),
+        'cmake':'toolchain/bin/cmake'+suffix,'ninja':'toolchain/bin/ninja'+suffix,
+        'cc':'toolchain/bin/clang'+suffix,'cxx':'toolchain/bin/clang++'+suffix,
+        'recompiler':'tools/N64Recomp'+suffix,'rsp':'tools/RSPRecomp'+suffix}
+    data={'format':1,'platform':args.platform,'tools':tools,'sources':'sources'}
+    if not windows:data['relocate']='toolchain/bin/conda-unpack'
+    (stage/'sdk.json').write_text(json.dumps(data,indent=2))
+    from tools.dependency_pack import sdk_environment
+    env=sdk_environment(stage,data)
+    # Use the original prefix for compilation; compiled tools find their shared
+    # libraries through sdk_environment after installation.
+    env['PATH']=str(args.toolchain/'bin')+os.pathsep+env.get('PATH','')
+    build=ROOT/'build/sdk-tools'
+    subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER=clang','-DCMAKE_CXX_COMPILER=clang++'],env=env,check=True)
+    subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'--build',str(build),'--target','N64RecompCLI','RSPRecomp','-j',args.jobs],env=env,check=True)
+    (stage/'tools').mkdir(exist_ok=True)
+    for tool in ('N64Recomp','RSPRecomp'):shutil.copy2(build/(tool+suffix),stage/'tools'/(tool+suffix))
+    for path in stage.rglob('*'):
+        if path.is_file() and path.suffix.lower() in ('.z64','.v64','.n64'):raise SystemExit('ROM-like file rejected: '+str(path))
+    name='mp2recomp-sdk-'+args.platform
+    if windows:archive=Path(shutil.make_archive(str(args.output/name),'zip',stage))
+    else:
+        archive=args.output/(name+'.tar.gz')
+        with tarfile.open(archive,'w:gz',compresslevel=3) as tar:
+            for item in sorted(stage.iterdir()):tar.add(item,arcname=item.name)
+    (args.output/(name+'.json')).write_text(json.dumps({'platform':args.platform,'filename':archive.name,'sha256':sha256(archive)},indent=2))
+    print(archive)
+if __name__=='__main__':main()

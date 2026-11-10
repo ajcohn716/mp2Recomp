@@ -38,20 +38,20 @@ class InstallerTests(unittest.TestCase):
         def run(command,cwd,env=None):
             commands.append(command)
             if command[:2]==['cmake','--build']:
-                binary=cwd/'build/native/mp2recomp';binary.parent.mkdir(parents=True);binary.write_text('#!/bin/sh\nexit 0\n')
+                binary=cwd/('build/native/mp2recomp.exe' if os.name=='nt' else 'build/native/mp2recomp');binary.parent.mkdir(parents=True);binary.write_text('#!/bin/sh\nexit 0\n')
         with patch.object(install,'ROOT',project),patch.object(install,'source_files',return_value=['install.py']),patch.object(install,'system_problems',return_value=[]),patch.object(install,'source_digest',return_value='abcdef'),patch.dict(os.environ,{'XDG_DATA_HOME':str(self.root/'desktop')}):
             engine=install.Installer(lambda _:None,lambda _:None);engine.run=run
-            launcher=engine.install(self.rom,prefix,build,2)
+            launcher=engine.install(self.rom,prefix,build,2,source_build=True)
             self.assertTrue(os.access(launcher,os.X_OK))
             self.assertEqual((prefix/install.ROM_NAME).read_bytes(),self.data)
             self.assertEqual((prefix/'userdata/save').read_text(),'keep me')
             self.assertFalse((build/'source/forbidden.bin').exists())
             self.assertIn('-j',commands[-1])
-            self.assertIn(str(launcher),(self.root/'desktop/applications/mp2recomp.desktop').read_text())
-            before=(prefix/'mp2recomp').read_bytes()
+            if os.name!='nt':self.assertIn(str(launcher),(self.root/'desktop/applications/mp2recomp.desktop').read_text())
+            before=(prefix/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')).read_bytes()
             engine.run=lambda *a,**k:(_ for _ in ()).throw(install.InstallError('fake build failure'))
-            with self.assertRaises(install.InstallError):engine.install(self.rom,prefix,build,2)
-            self.assertEqual((prefix/'mp2recomp').read_bytes(),before)
+            with self.assertRaises(install.InstallError):engine.install(self.rom,prefix,build,2,source_build=True)
+            self.assertEqual((prefix/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')).read_bytes(),before)
     def test_cancel_before_install(self):
         engine=install.Installer(lambda _:None,lambda _:None);engine.cancel()
         with self.assertRaises(install.Cancelled):engine.install(self.rom,self.root/'install')

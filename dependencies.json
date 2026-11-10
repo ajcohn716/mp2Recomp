@@ -1,6 +1,22 @@
 {
-  "N64Recomp": {"url": "https://github.com/N64Recomp/N64Recomp.git", "commit": "598ce2080004a5672d604dceadbda436045307b7"},
-  "decomp": {"url": "https://github.com/Rainchus/marioparty2.git", "commit": "020a95ae0021a5d6d4e39cf98628cb86faba129a"},
-  "runtime": {"url": "https://github.com/N64Recomp/N64ModernRuntime.git", "commit": "e4342ae030a9d94aa97a81aafd3368ed7daa74df"},
-  "rt64": {"url": "https://github.com/rt64/rt64.git", "commit": "d9817c68ffd7328cd0af383af124971489366e18"}
+  "N64Recomp": {
+    "url": "https://github.com/N64Recomp/N64Recomp.git",
+    "commit": "598ce2080004a5672d604dceadbda436045307b7"
+  },
+  "decomp": {
+    "url": "https://github.com/Rainchus/marioparty2.git",
+    "commit": "020a95ae0021a5d6d4e39cf98628cb86faba129a"
+  },
+  "runtime": {
+    "url": "https://github.com/N64Recomp/N64ModernRuntime.git",
+    "commit": "e4342ae030a9d94aa97a81aafd3368ed7daa74df"
+  },
+  "rt64": {
+    "url": "https://github.com/rt64/rt64.git",
+    "commit": "d9817c68ffd7328cd0af383af124971489366e18"
+  },
+  "directx-headers": {
+    "url": "https://github.com/microsoft/DirectX-Headers.git",
+    "commit": "5760f9342487777c39b6938d4f2118fcdf6c2664"
+  }
 }

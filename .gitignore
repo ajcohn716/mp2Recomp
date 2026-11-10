@@ -46,3 +46,5 @@ imgui.ini
 __pycache__/
 
 /dist/
+
+/directx-headers/

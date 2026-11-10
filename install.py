@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Linux source installer. Game code is generated only on the player's machine."""
+"""ROM-driven installer for Linux and Windows. Game code is generated locally."""
 import argparse
 import contextlib
 try:
@@ -17,7 +17,8 @@ import subprocess
 import sys
 import threading
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+if getattr(sys,"frozen",False):ROOT = ROOT/"source"
 ROM_NAME = 'Mario Party 2 (USA).z64'
 ROM_SHA1 = '166eda1c05670d337e2c3f15a5db528ae1e5d6e3'
 ROM_SIZE = 32 * 1024 * 1024
@@ -55,11 +56,11 @@ def source_digest():
 
 def system_problems():
     problems = []
-    if not sys.platform.startswith('linux'):
-        problems.append('This installer currently supports Linux only.')
+    if sys.platform not in ('linux','win32'):
+        problems.append('Supported platforms are Linux and Windows x86-64.')
     for command in ('git', 'cmake', 'ninja', 'clang', 'clang++', 'pkg-config', 'rg'):
         if not shutil.which(command): problems.append('Missing command: ' + command)
-    if shutil.which('pkg-config'):
+    if os.name!='nt' and shutil.which('pkg-config'):
         for package in ('sdl2', 'SDL2_ttf', 'gtk+-3.0'):
             if subprocess.run(['pkg-config','--exists',package]).returncode:
                 problems.append('Missing development package: ' + package)
@@ -68,7 +69,7 @@ def system_problems():
     except ImportError:
         problems.append('Python venv and ensurepip support are required.')
     fonts = ('/usr/share/fonts/noto/NotoSans-Regular.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', '/usr/share/fonts/TTF/DejaVuSans.ttf')
-    if not any(Path(p).is_file() for p in fonts):
+    if os.name!='nt' and not any(Path(p).is_file() for p in fonts):
         problems.append('Install the Noto Sans or DejaVu Sans system font for game settings.')
     return problems
 
@@ -90,7 +91,14 @@ class Installer:
         self.cancelled.set()
         with self.process_lock:
             if self.process and self.process.poll() is None:
-                with contextlib.suppress(ProcessLookupError): os.killpg(self.process.pid, signal.SIGTERM)
+                self.terminate(self.process)
+
+    @staticmethod
+    def terminate(process):
+        if os.name=='nt':
+            subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        else:
+            with contextlib.suppress(ProcessLookupError):os.killpg(process.pid,signal.SIGTERM)
 
     def check_cancelled(self):
         if self.cancelled.is_set(): raise Cancelled('Installation cancelled. You can resume using the same build directory.')
@@ -107,10 +115,12 @@ class Installer:
             result = process.wait()
         except BaseException:
             if process.poll() is None:
-                with contextlib.suppress(ProcessLookupError): os.killpg(process.pid, signal.SIGTERM)
+                self.terminate(process)
                 try: process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
-                    with contextlib.suppress(ProcessLookupError): os.killpg(process.pid, signal.SIGKILL)
+                    if os.name=="nt":process.kill()
+                    else:
+                        with contextlib.suppress(ProcessLookupError):os.killpg(process.pid,signal.SIGKILL)
                     process.wait()
             raise
         finally:
@@ -118,15 +128,15 @@ class Installer:
         self.check_cancelled()
         if result: raise InstallError(f'Command failed (exit {result}). See the installation log.')
 
-    def install(self, rom, prefix, build_dir=None, jobs=4, desktop=True, dependency_pack=None, sdk_dir=None):
+    def install(self, rom, prefix, build_dir=None, jobs=4, desktop=True, dependency_pack=None, sdk_dir=None, source_build=False):
         self.status('Validating ROM')
         data = validate_rom(rom)
         self.check_cancelled()
-        problems = system_problems()
+        problems = system_problems() if source_build else []
         if problems: raise InstallError('\n'.join(problems))
         prefix = Path(prefix).expanduser().resolve()
         digest = source_digest()
-        cache = Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))
+        cache = Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'mp2recomp/cache' if os.name=='nt' else Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))
         build_dir = Path(build_dir).expanduser().resolve() if build_dir else cache/'mp2recomp'/'installer'/digest[:12]
         # Never overwrite the developer checkout or build under the install directory.
         if build_dir == ROOT or ROOT in build_dir.parents or prefix == ROOT or ROOT in prefix.parents:
@@ -150,17 +160,40 @@ class Installer:
             rom_file=source/ROM_NAME
             if not rom_file.exists() or hashlib.sha1(rom_file.read_bytes()).hexdigest()!=ROM_SHA1:
                 rom_file.write_bytes(data)
-            self.status('Fetching pinned build dependencies')
-            self.run([sys.executable,'tools/bootstrap.py'],source)
+            from tools.dependency_pack import ensure_sdk,load_sdk,sdk_environment
+            sdk=None
+            if source_build:
+                self.status('Fetching pinned build dependencies')
+                self.run([sys.executable,'tools/bootstrap.py'],source)
+                env=dict(os.environ,JOBS=str(jobs))
+                python=sys.executable;cmake='cmake';cc='clang';cxx='clang++'
+                regenerate=['bash','tools/regenerate.sh']
+            else:
+                sdk=ensure_sdk(cache,ROOT,self.run,self.status,self.check_cancelled,dependency_pack,sdk_dir)
+                metadata=load_sdk(sdk);env=sdk_environment(sdk,metadata)
+                tool=lambda name:str(sdk/metadata['tools'][name])
+                python=tool('python');cmake=tool('cmake');cc=tool('cc');cxx=tool('cxx')
+                self.status('Preparing bundled source dependencies')
+                for name in ('N64Recomp','runtime','rt64','decomp','directx-headers'):
+                    self.check_cancelled()
+                    shutil.copytree(sdk/'sources'/name,source/name,dirs_exist_ok=True,symlinks=False)
+                regenerate=[python,'tools/regenerate.py','--recompiler',tool('recompiler'),'--rsp',tool('rsp'),'--jobs',str(jobs)]
             self.status('Generating native game code from your ROM')
-            env = dict(os.environ, JOBS=str(jobs))
-            # All scripts use the selected Python installation, including venv creation.
-            self.run(['bash','tools/regenerate.sh'],source,env)
+            self.run(regenerate,source,env)
             self.status('Configuring the native build')
-            self.run(['cmake','-S','.', '-B','build/native','-G','Ninja','-DCMAKE_BUILD_TYPE=Release',
-                '-DCMAKE_C_COMPILER=clang','-DCMAKE_CXX_COMPILER=clang++'],source)
+            configure=[cmake,'-S','.', '-B','build/native','-G','Ninja','-DCMAKE_BUILD_TYPE=Release',
+                '-DCMAKE_C_COMPILER='+cc,'-DCMAKE_CXX_COMPILER='+cxx]
+            if sdk:
+                configure+=['-DCMAKE_MAKE_PROGRAM='+tool('ninja'),'-DCMAKE_PREFIX_PATH='+str(sdk/'toolchain'),
+                    '-DSDL2_DIR='+str(sdk/'toolchain/lib/cmake/SDL2'),'-DSDL2_ttf_DIR='+str(sdk/'toolchain/lib/cmake/SDL2_ttf')]
+                if os.name!='nt':
+                    sysroot=sdk/'toolchain/x86_64-conda-linux-gnu/sysroot'
+                    if sysroot.is_dir():
+                        flags='--gcc-toolchain='+str(sdk/'toolchain')+' --sysroot='+str(sysroot)
+                        configure+=['-DCMAKE_C_FLAGS='+flags,'-DCMAKE_CXX_FLAGS='+flags]
+            self.run(configure,source,env)
             self.status('Building Mario Party 2 (this can take several minutes)')
-            self.run(['cmake','--build','build/native','--target','mp2recomp','-j',str(jobs)],source)
+            self.run([cmake,'--build','build/native','--target','mp2recomp','-j',str(jobs)],source,env)
             self.check_cancelled()
             self.status('Installing the game and launcher')
             # Replace finished files atomically. User saves and preferences are preserved.
@@ -170,12 +203,32 @@ class Installer:
                 else: temp.write_bytes(contents)
                 temp.chmod(0o755 if executable else 0o600)
                 os.replace(temp,target)
-            put('mp2recomp',copy_from=source/'build/native/mp2recomp',executable=True)
+            binary='mp2recomp.exe' if os.name=='nt' else 'mp2recomp'
+            put(binary,copy_from=source/'build/native'/binary,executable=True)
             put(ROM_NAME,contents=data)
-            launcher='#!/bin/sh\nset -eu\ncd -- '+shlex.quote(str(prefix))+'\nexec ./mp2recomp "$@"\n'
-            put('play',contents=launcher.encode(),executable=True)
+            if sdk:
+                self.status('Installing runtime libraries')
+                library_dir=prefix if os.name=='nt' else prefix/'lib'
+                library_dir.mkdir(exist_ok=True)
+                pattern='*.dll' if os.name=='nt' else '*.so*'
+                search=[sdk/'toolchain'/('bin' if os.name=='nt' else 'lib'),source/'rt64/src/contrib/dxc'/('bin/x64' if os.name=='nt' else 'lib/x64')]
+                for directory in search:
+                    for library in directory.glob(pattern):
+                        if library.is_file():shutil.copy2(library,library_dir/library.name)
+            if os.name=='nt':
+                # The executable locates ROM/userdata beside itself, even when
+                # launched through Explorer with a different working directory.
+                launcher_path=prefix/binary
+            else:
+                launcher='#!/bin/sh\nset -eu\ncd -- '+shlex.quote(str(prefix))+'\nexport LD_LIBRARY_PATH="$PWD/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec ./mp2recomp "$@"\n'
+                put('play',contents=launcher.encode(),executable=True)
+                launcher_path=prefix/'play'
             put('install.json',contents=(json.dumps({'source_digest':digest,'rom_sha1':ROM_SHA1,'build_directory':str(build_dir)},indent=2)+'\n').encode())
-            if desktop:
+            if desktop and os.name=='nt':
+                desktop_dir=Path(os.environ.get('APPDATA',Path.home()/'AppData/Roaming'))/'Microsoft/Windows/Start Menu/Programs'
+                desktop_dir.mkdir(parents=True,exist_ok=True)
+                (desktop_dir/'Mario Party 2 Recompiled.url').write_text('[InternetShortcut]\nURL='+launcher_path.as_uri()+'\n')
+            if desktop and os.name!='nt':
                 applications=Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))/'applications'
                 applications.mkdir(parents=True,exist_ok=True)
                 executable=str(prefix/'play').replace('%','%%')
@@ -184,9 +237,10 @@ class Installer:
                 temp=applications/'mp2recomp.desktop.tmp';temp.write_text(entry)
                 os.replace(temp,applications/'mp2recomp.desktop')
             self.status('Installed. Ready to play.')
-        return prefix/'play'
+        return launcher_path
 
 def default_prefix():
+    if os.name=='nt':return Path(os.environ.get('LOCALAPPDATA',Path.home()/'AppData/Local'))/'mp2recomp'
     return Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))/'mp2recomp'
 
 def main(argv=None):
@@ -197,6 +251,7 @@ def main(argv=None):
     parser.add_argument('--jobs',type=int,default=min(4,os.cpu_count() or 1),help='Parallel compiler jobs (default: %(default)s)')
     parser.add_argument('--launch',action='store_true',help='Launch the installed game when finished')
     parser.add_argument('--no-desktop',action='store_true',help='Do not create a desktop-menu entry')
+    parser.add_argument('--source-build',action='store_true',help='Developer mode: use system build tools instead of a dependency pack')
     parser.add_argument('--dependency-pack',type=Path,help='Offline dependency archive')
     parser.add_argument('--sdk-dir',type=Path,help='Already unpacked dependency pack')
     parser.add_argument('--gui-smoke-test',action='store_true',help=argparse.SUPPRESS)
@@ -219,13 +274,13 @@ def main(argv=None):
             print('GUI requires PySide6. Use a packaged installer or install tools/installer-requirements.txt. CLI is available with --rom. '+str(exc),file=sys.stderr);return 1
     installer=Installer()
     try:
-        launcher=installer.install(args.rom,args.prefix,args.build_dir,args.jobs,not args.no_desktop)
+        launcher=installer.install(args.rom,args.prefix,args.build_dir,args.jobs,not args.no_desktop,dependency_pack=args.dependency_pack,sdk_dir=args.sdk_dir,source_build=args.source_build)
         print('Launcher: '+str(launcher))
         if args.launch:subprocess.Popen([str(launcher)],start_new_session=True)
         return 0
     except KeyboardInterrupt:
         installer.cancel();print('Installation cancelled.',file=sys.stderr);return 130
-    except (InstallError,OSError) as exc:
+    except (InstallError,OSError,RuntimeError,ValueError) as exc:
         print(str(exc),file=sys.stderr);return 1
 
 if __name__=='__main__':raise SystemExit(main())
