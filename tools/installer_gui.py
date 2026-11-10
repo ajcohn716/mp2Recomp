@@ -52,7 +52,6 @@ class Window(QMainWindow):
         self.setWindowTitle('Install Mario Party 2 Recompiled');self.resize(680,680)
         body=QWidget();self.setCentralWidget(body);layout=QVBoxLayout(body);layout.setContentsMargins(26,22,26,22);layout.setSpacing(12)
         title=QLabel('Mario Party 2 Recompiled');title.setObjectName('heading');layout.addWidget(title)
-        layout.addWidget(QLabel('Bring your ROM. We’ll take care of the build tools.'))
         self.drop=DropArea();self.drop.selected.connect(lambda p:self.rom.setText(p));self.drop.browse.connect(self.choose_rom);layout.addWidget(self.drop)
         self.rom=QLineEdit(str(args.rom or ''));self.rom.setPlaceholderText('ROM file');layout.addWidget(self.rom)
         row=QHBoxLayout();row.addWidget(QLabel('Install to'));self.prefix=QLineEdit(str(args.prefix));row.addWidget(self.prefix)
