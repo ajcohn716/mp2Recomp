@@ -44,3 +44,5 @@
 /core*
 imgui.ini
 __pycache__/
+
+/dist/

@@ -7,6 +7,10 @@ import sys
 # accidentally admit a ROM, asset, dependency checkout, or generated code.
 ALLOWED = {
     ".gitignore",
+    "install.py",
+    "tools/installer_gui.py",
+    "tools/package_installer.py",
+    "tests/test_installer.py",
     "CMakeLists.txt",
     "README.md",
     "aspMain.toml",
