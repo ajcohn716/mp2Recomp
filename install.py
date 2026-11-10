@@ -107,7 +107,7 @@ def install_linux_runtime_data(sdk,prefix):
 def install_runtime_libraries(sdk,source,prefix):
     sdk=Path(sdk);source=Path(source);prefix=Path(prefix)
     library_dir=prefix if os.name=='nt' else prefix/'lib'
-    library_dir.mkdir(exist_ok=True)
+    library_dir.mkdir(parents=True,exist_ok=True)
     if os.name!='nt':
         install_linux_runtime_data(sdk,prefix)
         for subdir in ('pulseaudio','libdecor'):
