@@ -27,6 +27,7 @@ if(MINGW)
     target_compile_options(rabbitizer PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-include;cstdlib>")
     include(cmake/MinGWCompat.cmake)
     target_include_directories(plume BEFORE PUBLIC
+        ${CMAKE_SOURCE_DIR}/rt64/src/contrib/dxc/inc
         ${CMAKE_SOURCE_DIR}/directx-headers/include
         ${CMAKE_SOURCE_DIR}/directx-headers/include/directx
         ${CMAKE_SOURCE_DIR}/directx-headers/include/dxguids)
