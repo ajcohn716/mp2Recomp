@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        os: [ubuntu-22.04, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -87,11 +87,15 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: python tools/package_installer.py --metadata dist/metadata --tag "$env:RELEASE_TAG" --repository "$env:REPOSITORY"
         shell: pwsh
-      - name: Test packaged CLI
+      - name: Test packaged CLI and GUI
+        env:
+          QT_QPA_PLATFORM: offscreen
         shell: pwsh
         run: |
           $exe = if ($IsWindows) {'dist/installer/mp2recomp-installer/mp2recomp-installer.exe'} else {'dist/installer/mp2recomp-installer/mp2recomp-installer'}
           & $exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $exe --gui-smoke-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload installers
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
