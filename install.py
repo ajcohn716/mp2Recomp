@@ -86,6 +86,8 @@ def install_linux_runtime_data(sdk,prefix):
     keyboard=next((p for p in candidates if (p/'rules/evdev').is_file()),None)
     if keyboard is None:raise InstallError('Dependency pack is missing XKB keyboard data.')
     shutil.copytree(keyboard,prefix/'share/X11/xkb',dirs_exist_ok=True)
+    locale=toolchain/'share/X11/locale'
+    if locale.is_dir():shutil.copytree(locale,prefix/'share/X11/locale',dirs_exist_ok=True)
     fonts=prefix/'etc/fonts';fonts.mkdir(parents=True,exist_ok=True)
     conf=toolchain/'etc/fonts/conf.d'
     if not conf.is_dir():raise InstallError('Dependency pack is missing font configuration.')

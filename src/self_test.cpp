@@ -17,6 +17,7 @@ int mp2_self_test(){
 #include <gtk/gtk.h>
 #include <fontconfig/fontconfig.h>
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 #endif
 int mp2_runtime_self_test(){
 #ifndef _WIN32
@@ -31,9 +32,13 @@ int mp2_runtime_self_test(){
     xkb_context* context=xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     xkb_keymap* keymap=context?xkb_keymap_new_from_names(context,nullptr,XKB_KEYMAP_COMPILE_NO_FLAGS):nullptr;
     if(keymap)xkb_keymap_unref(keymap);
+    xkb_compose_table* compose=context?xkb_compose_table_new_from_locale(context,"en_US.UTF-8",XKB_COMPOSE_COMPILE_NO_FLAGS):nullptr;
+    bool compose_valid=compose!=nullptr;
+    if(compose)xkb_compose_table_unref(compose);
     if(context)xkb_context_unref(context);
     if(!keymap){fputs("XKB default keymap failed.\n",stderr);return 4;}
-    puts("GTK, Fontconfig and XKB runtime data check passed.");
+    if(!compose_valid){fputs("XKB Compose data missing.\n",stderr);return 5;}
+    puts("GTK, Fontconfig, XKB and Compose runtime data check passed.");
 #endif
     return 0;
 }

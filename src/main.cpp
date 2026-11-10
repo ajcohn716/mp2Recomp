@@ -56,6 +56,9 @@ void configure_bundled_runtime() {
     auto decorations=directory/"lib/libdecor/plugins-1";
     if(std::filesystem::is_directory(decorations))
         setenv("LIBDECOR_PLUGIN_DIR",decorations.c_str(),1);
+    auto locale=directory/"share/X11/locale";
+    if(std::filesystem::is_regular_file(locale/"compose.dir"))
+        setenv("XLOCALEDIR",locale.c_str(),1);
     auto keyboard=directory/"share/X11/xkb";
     if(std::filesystem::is_regular_file(keyboard/"rules/evdev"))
         setenv("XKB_CONFIG_ROOT",keyboard.c_str(),1);

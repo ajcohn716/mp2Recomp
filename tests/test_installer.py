@@ -122,6 +122,8 @@ class InstallerTests(unittest.TestCase):
         sdk=self.root/'sdk';toolchain=sdk/'toolchain'
         xkb=toolchain/'share/xkeyboard-config-2/rules';xkb.mkdir(parents=True)
         (xkb/'evdev').write_text('synthetic keymap rules')
+        locale=toolchain/'share/X11/locale';locale.mkdir(parents=True)
+        (locale/'compose.dir').write_text('synthetic Compose directory')
         conf=toolchain/'etc/fonts/conf.d';conf.mkdir(parents=True)
         rules=toolchain/'share/fontconfig/conf.avail';rules.mkdir(parents=True)
         (rules/'10-test.conf').write_text('<fontconfig/>')
@@ -140,6 +142,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual((moved/'lib/libwayland-client.so.0').read_text(),'Wayland client runtime')
         self.assertEqual((moved/'lib/libdecor/plugins-1/libdecor-gtk.so').read_text(),'Wayland decoration plugin')
         self.assertFalse((moved/'lib/libvulkan.so.1').exists())
+        self.assertEqual((moved/'share/X11/locale/compose.dir').read_text(),'synthetic Compose directory')
 
     def test_verified_pack_and_cache(self):
         import io,json,tarfile
