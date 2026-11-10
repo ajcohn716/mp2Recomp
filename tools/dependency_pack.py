@@ -46,13 +46,23 @@ def sha256(path):
 def ensure_sdk(cache,source_root,run,status,check_cancelled,archive=None,sdk_dir=None):
     if sdk_dir:
         root=Path(sdk_dir).expanduser().resolve();load_sdk(root);return root
+    from install import lock_file
+    directory=Path(cache)/'dependencies';directory.mkdir(parents=True,exist_ok=True)
+    with (directory/'.prepare.lock').open('a') as lock:
+        try:lock_file(lock)
+        except OSError:raise RuntimeError('Another installer is preparing dependency packs. Try again when it finishes.')
+        return _ensure_sdk(cache,source_root,run,status,check_cancelled,archive,sdk_dir)
+
+def _ensure_sdk(cache,source_root,run,status,check_cancelled,archive=None,sdk_dir=None):
+    if sdk_dir:
+        root=Path(sdk_dir).expanduser().resolve();load_sdk(root);return root
     catalog_path=Path(source_root)/'release-catalog.json'
     if not catalog_path.is_file():
         raise RuntimeError('No dependency catalog in this source checkout. Use a release installer, --sdk-dir, or --source-build with system build tools.')
     catalog=json.loads(catalog_path.read_text());entry=catalog['packs'][platform_key()]
     expected=entry['sha256']
     root=Path(cache)/'dependencies'/expected
-    if (root/'sdk.json').exists():load_sdk(root);return root
+    if (root/'.ready').exists():load_sdk(root);return root
     parent=root.parent;parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pack-',dir=parent) as temporary:
         temporary=Path(temporary)
@@ -82,6 +92,7 @@ def ensure_sdk(cache,source_root,run,status,check_cancelled,archive=None,sdk_dir
         if data.get('relocate'):
             env=sdk_environment(root,data)
             run([str(root/data['tools']['python']),str(root/data['relocate'])],root,env)
+    (root/'.ready').write_text('1\n')
     return root
 
 def sdk_environment(root,data=None):

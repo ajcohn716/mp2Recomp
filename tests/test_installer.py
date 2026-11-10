@@ -67,4 +67,34 @@ class InstallerTests(unittest.TestCase):
         self.assertIsNone(local_drop_path([QUrl('https://example.invalid/rom')]))
         self.assertIsNone(local_drop_path([]))
 
+    def test_verified_pack_and_cache(self):
+        import io,json,tarfile
+        from tools.dependency_pack import ensure_sdk,platform_key
+        sdk=self.root/'synthetic-sdk';sdk.mkdir()
+        tools={name:'tool-'+name for name in ('python','cmake','ninja','cc','cxx','recompiler','rsp')}
+        for name in tools.values():(sdk/name).write_text('synthetic test tool')
+        (sdk/'sdk.json').write_text(json.dumps({'format':1,'platform':platform_key(),'tools':tools}))
+        archive=self.root/'pack.tar.gz'
+        with tarfile.open(archive,'w:gz') as tar:
+            for path in sdk.iterdir():tar.add(path,arcname=path.name)
+        digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+        catalog={'packs':{platform_key():{'filename':archive.name,'sha256':digest,'url':'https://example.invalid/pack'}}}
+        (self.root/'release-catalog.json').write_text(json.dumps(catalog))
+        engine=install.Installer(lambda _:None,lambda _:None)
+        root=ensure_sdk(self.root/'cache',self.root,engine.run,engine.status,engine.check_cancelled,archive)
+        self.assertTrue((root/'.ready').is_file())
+        self.assertEqual(root,ensure_sdk(self.root/'cache',self.root,engine.run,engine.status,engine.check_cancelled,archive))
+        catalog['packs'][platform_key()]['sha256']='0'*64
+        (self.root/'release-catalog.json').write_text(json.dumps(catalog))
+        with self.assertRaisesRegex(RuntimeError,'checksum mismatch'):
+            ensure_sdk(self.root/'badcache',self.root,engine.run,engine.status,engine.check_cancelled,archive)
+    def test_archive_traversal_rejected(self):
+        import zipfile
+        from tools.dependency_pack import extract_archive
+        archive=self.root/'bad.zip'
+        with zipfile.ZipFile(archive,'w') as z:z.writestr('../outside','not allowed')
+        destination=self.root/'extracted';destination.mkdir()
+        with self.assertRaisesRegex(RuntimeError,'Unsafe path'):extract_archive(archive,destination)
+        self.assertFalse((self.root/'outside').exists())
+
 if __name__=='__main__':unittest.main()

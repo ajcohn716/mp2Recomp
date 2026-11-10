@@ -80,7 +80,7 @@ class Window(QMainWindow):
         self.installer=Installer(status=self.bridge.status.emit,log=self.bridge.log.emit)
         def work():
             launcher=None;error=None
-            try:launcher=self.installer.install(rom,prefix,cache or None,jobs,desktop,dependency_pack=pack or None,sdk_dir=self.args.sdk_dir)
+            try:launcher=self.installer.install(rom,prefix,cache or None,jobs,desktop,dependency_pack=pack or None,sdk_dir=self.args.sdk_dir,source_build=self.args.source_build)
             except Exception as exc:error=str(exc)
             self.bridge.finished.emit(launcher,error)
         threading.Thread(target=work,daemon=True).start()
