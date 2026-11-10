@@ -24,6 +24,21 @@ extern RspUcodeFunc aspMain;
 std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_null_renderer(uint8_t*, ultramodern::renderer::WindowHandle, bool);
 
 namespace {
+void configure_bundled_runtime() {
+#ifndef _WIN32
+    char* base=SDL_GetBasePath();
+    if (!base) return;
+    std::filesystem::path directory(base);SDL_free(base);
+    auto fonts=directory/"etc/fonts";
+    if(std::filesystem::is_regular_file(fonts/"fonts.conf")) {
+        setenv("FONTCONFIG_PATH",fonts.c_str(),1);
+        setenv("FONTCONFIG_FILE",(fonts/"fonts.conf").c_str(),1);
+    }
+    auto keyboard=directory/"share/X11/xkb";
+    if(std::filesystem::is_regular_file(keyboard/"rules/evdev"))
+        setenv("XKB_CONFIG_ROOT",keyboard.c_str(),1);
+#endif
+}
 SDL_Window* window;
 SDL_AudioDeviceID audio_device{};
 std::atomic<uint16_t> buttons{};
@@ -95,6 +110,10 @@ RspUcodeFunc* get_ucode(const OSTask* task) {
 }
 
 int main(int argc, char** argv) try {
+    configure_bundled_runtime();
+    for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--runtime-self-test") {
+        extern int mp2_runtime_self_test();return mp2_runtime_self_test();
+    }
     for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--self-test") {
         extern int mp2_self_test();return mp2_self_test();
     }

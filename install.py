@@ -80,6 +80,30 @@ def lock_file(file):
         msvcrt.locking(file.fileno(),msvcrt.LK_NBLCK,1)
     else:fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
 
+def install_linux_runtime_data(sdk,prefix):
+    toolchain=Path(sdk)/'toolchain';prefix=Path(prefix)
+    candidates=(toolchain/'share/xkeyboard-config-2',toolchain/'share/X11/xkb')
+    keyboard=next((p for p in candidates if (p/'rules/evdev').is_file()),None)
+    if keyboard is None:raise InstallError('Dependency pack is missing XKB keyboard data.')
+    shutil.copytree(keyboard,prefix/'share/X11/xkb',dirs_exist_ok=True)
+    fonts=prefix/'etc/fonts';fonts.mkdir(parents=True,exist_ok=True)
+    conf=toolchain/'etc/fonts/conf.d'
+    if not conf.is_dir():raise InstallError('Dependency pack is missing font configuration.')
+    # Materialize the SDK's relative symlinks before moving these rules.
+    shutil.copytree(conf,fonts/'conf.d',dirs_exist_ok=True)
+    # Do not copy conda's fonts.conf: it embeds its build/cache prefix.
+    (fonts/'fonts.conf').write_text('''<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <dir>/usr/share/fonts</dir>
+  <dir>/usr/local/share/fonts</dir>
+  <dir prefix="xdg">fonts</dir>
+  <dir>~/.fonts</dir>
+  <include ignore_missing="yes">conf.d</include>
+  <cachedir prefix="xdg">fontconfig</cachedir>
+</fontconfig>
+''')
+
 class Installer:
     def __init__(self, status=print, log=print):
         self.status, self.log = status, log
@@ -230,6 +254,7 @@ class Installer:
                 library_dir=prefix if os.name=='nt' else prefix/'lib'
                 library_dir.mkdir(exist_ok=True)
                 if os.name!='nt':
+                    install_linux_runtime_data(sdk,prefix)
                     pulse=sdk/'toolchain/lib/pulseaudio'
                     if pulse.is_dir():shutil.copytree(pulse,library_dir/'pulseaudio',dirs_exist_ok=True)
                 pattern='*.dll' if os.name=='nt' else '*.so*'

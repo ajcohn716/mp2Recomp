@@ -81,6 +81,58 @@ class InstallerTests(unittest.TestCase):
         self.assertIsNone(local_drop_path([QUrl('https://example.invalid/rom')]))
         self.assertIsNone(local_drop_path([]))
 
+    def test_gui_contrast_under_dark_and_light_host_palettes(self):
+        from tools.installer_gui import apply_theme,Window
+        from PySide6.QtWidgets import QApplication,QGroupBox
+        from PySide6.QtGui import QPalette,QColor
+        app=QApplication.instance() or QApplication([])
+        type(self).qt_app=app
+        original=QPalette(app.palette())
+        def luminance(color):
+            values=[v/12.92 if v<=0.04045 else ((v+0.055)/1.055)**2.4
+                for v in (color.redF(),color.greenF(),color.blueF())]
+            return sum(v*w for v,w in zip(values,(0.2126,0.7152,0.0722)))
+        def check(foreground,background):
+            values=sorted((luminance(foreground),luminance(background)))
+            self.assertGreaterEqual((values[1]+0.05)/(values[0]+0.05),4.5)
+        try:
+            for dark in (False,True):
+                host=QPalette()
+                host.setColor(QPalette.ColorRole.Window,QColor('#121212' if dark else '#ffffff'))
+                host.setColor(QPalette.ColorRole.Text,QColor('#ffffff' if dark else '#000000'))
+                host.setColor(QPalette.ColorRole.WindowText,QColor('#ffffff' if dark else '#000000'))
+                host.setColor(QPalette.ColorRole.Base,QColor('#222222' if dark else '#ffffff'))
+                app.setPalette(host);apply_theme(app)
+                args=SimpleNamespace(rom=None,prefix=self.root,build_dir=None,dependency_pack=None,
+                    jobs=2,no_desktop=True,source_build=False,sdk_dir=None)
+                window=Window(args);window.findChild(QGroupBox).setChecked(True)
+                window.show();app.processEvents()
+                for enabled in (True,False):
+                    for field in (window.rom,window.prefix,window.log,window.jobs):
+                        field.setEnabled(enabled);app.processEvents();palette=field.palette()
+                        check(palette.color(QPalette.ColorRole.Text),palette.color(QPalette.ColorRole.Base))
+                palette=window.status.palette()
+                check(palette.color(QPalette.ColorRole.WindowText),palette.color(QPalette.ColorRole.Window))
+                window.close();window.deleteLater();app.processEvents()
+        finally:app.setPalette(original)
+
+    @unittest.skipIf(os.name=='nt','Linux runtime data')
+    def test_runtime_data_survives_relocation(self):
+        import shutil
+        sdk=self.root/'sdk';toolchain=sdk/'toolchain'
+        xkb=toolchain/'share/xkeyboard-config-2/rules';xkb.mkdir(parents=True)
+        (xkb/'evdev').write_text('synthetic keymap rules')
+        conf=toolchain/'etc/fonts/conf.d';conf.mkdir(parents=True)
+        rules=toolchain/'share/fontconfig/conf.avail';rules.mkdir(parents=True)
+        (rules/'10-test.conf').write_text('<fontconfig/>')
+        (conf/'10-test.conf').symlink_to('../../../share/fontconfig/conf.avail/10-test.conf')
+        (conf.parent/'fonts.conf').write_text('/home/runner/should-not-be-copied')
+        prefix=self.root/'installed';install.install_linux_runtime_data(sdk,prefix)
+        moved=self.root/'moved with spaces';prefix.rename(moved);shutil.rmtree(sdk)
+        self.assertEqual((moved/'share/X11/xkb/rules/evdev').read_text(),'synthetic keymap rules')
+        self.assertEqual((moved/'etc/fonts/conf.d/10-test.conf').read_text(),'<fontconfig/>')
+        self.assertNotIn('/home/runner',(moved/'etc/fonts/fonts.conf').read_text())
+
     def test_verified_pack_and_cache(self):
         import io,json,tarfile
         from tools.dependency_pack import ensure_sdk,platform_key

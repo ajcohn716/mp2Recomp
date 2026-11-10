@@ -2,9 +2,24 @@
 from pathlib import Path
 import threading
 from PySide6.QtCore import QObject, Signal, QTimer, Qt, QUrl
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,
     QFrame,QLineEdit,QPushButton,QFileDialog,QSpinBox,QCheckBox,QPlainTextEdit,QProgressBar,QGroupBox)
 from install import Installer, launch_game
+
+def apply_theme(app):
+    # Set every text/background pair together, independent of the host theme.
+    app.setStyle('Fusion')
+    palette=QPalette()
+    colors={'Window':'#f5f7fb','WindowText':'#17212f','Base':'#ffffff',
+        'AlternateBase':'#edf2f9','Text':'#17212f','Button':'#e7edf5',
+        'ButtonText':'#17212f','ToolTipBase':'#ffffff','ToolTipText':'#17212f',
+        'Highlight':'#285bb5','HighlightedText':'#ffffff','PlaceholderText':'#526078'}
+    for role,color in colors.items():palette.setColor(getattr(QPalette.ColorRole,role),QColor(color))
+    for role in ('WindowText','Text','ButtonText','PlaceholderText'):
+        palette.setColor(QPalette.ColorGroup.Disabled,getattr(QPalette.ColorRole,role),QColor('#526078'))
+    palette.setColor(QPalette.ColorGroup.Disabled,QPalette.ColorRole.Base,QColor('#edf0f4'))
+    app.setPalette(palette)
 
 def local_drop_path(urls):
     if len(urls)!=1 or not urls[0].isLocalFile():return None
@@ -57,7 +72,7 @@ class Window(QMainWindow):
         self.go=QPushButton('Go');self.go.setObjectName('go');self.go.setMinimumWidth(120);self.go.clicked.connect(self.start);actions.addWidget(self.go);layout.addLayout(actions)
         self.controls=[self.drop,self.rom,self.prefix,folder,advanced,self.launch]
         self.bridge=Bridge();self.bridge.log.connect(self.log.appendPlainText);self.bridge.status.connect(self.status.setText);self.bridge.finished.connect(self.finished)
-        self.setStyleSheet('QMainWindow{background:#f5f7fb} QLabel#heading{font-size:25px;font-weight:700} QFrame#dropArea{background:#e8effb;border:2px dashed #6d8ebd;border-radius:12px} QPushButton{padding:7px 12px} QPushButton#go{background:#285bb5;color:white;font-weight:700;border-radius:6px} QLineEdit{padding:6px} QPlainTextEdit{background:#fff;border:1px solid #d4dce8}')
+        self.setStyleSheet('QWidget{color:#17212f} QWidget:disabled{color:#526078} QMainWindow{background:#f5f7fb} QLabel#heading{font-size:25px;font-weight:700} QFrame#dropArea{background:#e8effb;border:2px dashed #6d8ebd;border-radius:12px} QPushButton{padding:7px 12px} QPushButton#go{background:#285bb5;color:white;font-weight:700;border-radius:6px} QLineEdit,QSpinBox{padding:6px;background:#fff;color:#17212f;selection-background-color:#285bb5;selection-color:#fff} QLineEdit:disabled,QSpinBox:disabled{background:#edf0f4;color:#526078} QPlainTextEdit{background:#fff;color:#17212f;border:1px solid #d4dce8}')
     def choose_rom(self):
         path,_=QFileDialog.getOpenFileName(self,'Choose your USA ROM','','Nintendo 64 ROM (*.z64 *.n64 *.v64);;All files (*)')
         if path:self.rom.setText(path)
@@ -95,6 +110,6 @@ class Window(QMainWindow):
         if self.close_when_done:self.close()
 
 def run_gui(args):
-    app=QApplication.instance() or QApplication([]);window=Window(args);window.show()
+    app=QApplication.instance() or QApplication([]);apply_theme(app);window=Window(args);window.show()
     if getattr(args,'gui_smoke_test',False):QTimer.singleShot(800,window.close)
     return app.exec()

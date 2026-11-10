@@ -86,6 +86,12 @@ def main():
     subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','netplay_test','-j',args.jobs,'--','-k','0'],env=env,check=True)
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
     subprocess.run([str(check/('netplay_test'+suffix))],env=env,check=True)
+    if not windows:
+        from install import install_linux_runtime_data
+        install_linux_runtime_data(stage,check)
+        probe_env=dict(env,FONTCONFIG_FILE='/missing/build-host/fonts.conf',
+            FONTCONFIG_PATH='/missing/build-host/fonts',XKB_CONFIG_ROOT='/missing/build-host/xkb',GDK_BACKEND='x11')
+        subprocess.run(['xvfb-run','-a',str(check/'mp2recomp'),'--runtime-self-test'],env=probe_env,check=True)
     for path in stage.rglob('*'):
         if path.is_file() and path.suffix.lower() in ('.z64','.v64','.n64'):raise SystemExit('ROM-like file rejected: '+str(path))
     name='mp2recomp-sdk-'+args.platform

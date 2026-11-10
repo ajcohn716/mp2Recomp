@@ -36,6 +36,9 @@ jobs:
           python tools/audit_repository.py
           python tools/bootstrap.py
       - if: runner.os == 'Linux'
+        name: Install runtime-data test display
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+      - if: runner.os == 'Linux'
         uses: mamba-org/setup-micromamba@add3a49764cedee8ee24e82dfde87f5bc2914462
         with:
           environment-file: tools/dependency-environment.yml
