@@ -43,6 +43,25 @@ def validate_rom(path):
         raise InstallError('ROM does not match Mario Party 2 USA. Expected SHA-1: ' + ROM_SHA1)
     return data
 
+def find_rom():
+    # Frozen bundles keep their source under _MEIPASS, away from user files.
+    executable = Path(sys.executable if getattr(sys, 'frozen', False) else __file__)
+    directories = dict.fromkeys((executable.resolve().parent, Path.cwd()))
+    for directory in directories:
+        try:
+            candidates = sorted(directory.iterdir())
+        except OSError:
+            continue
+        for path in candidates:
+            if path.suffix.lower() not in ('.z64', '.v64', '.n64'):
+                continue
+            try:
+                validate_rom(path)
+            except (InstallError, OSError):
+                continue
+            return path
+    return None
+
 def source_files():
     # This allowlist is also used by the repository publication audit.
     from tools.audit_repository import ALLOWED
@@ -319,7 +338,7 @@ def default_prefix():
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--rom',type=Path,help='Mario Party 2 USA ROM (.z64, .v64, or .n64)')
+    parser.add_argument('--rom',type=Path,help='Mario Party 2 USA ROM (.z64, .v64, or .n64); otherwise search beside the installer, then the working directory')
     parser.add_argument('--prefix',type=Path,default=default_prefix(),help='Install directory (default: %(default)s)')
     parser.add_argument('--build-dir',type=Path,help='Separate build/cache directory; reusable after a failed install')
     parser.add_argument('--jobs',type=int,default=min(4,os.cpu_count() or 1),help='Parallel compiler jobs (default: %(default)s)')
@@ -329,18 +348,21 @@ def main(argv=None):
     parser.add_argument('--dependency-pack',type=Path,help='Offline dependency archive')
     parser.add_argument('--sdk-dir',type=Path,help='Already unpacked dependency pack')
     parser.add_argument('--gui-smoke-test',action='store_true',help=argparse.SUPPRESS)
-    parser.add_argument('--gui',action='store_true',help='Open the GUI, optionally prefilled with --rom')
+    parser.add_argument('--gui',action='store_true',help='Open the GUI with the supplied or autodetected ROM')
     parser.add_argument('--check-system',action='store_true',help='Check build requirements without installing')
-    parser.add_argument('--validate-rom',action='store_true',help='Validate --rom without installing')
+    parser.add_argument('--validate-rom',action='store_true',help='Validate the supplied or autodetected ROM without installing')
     args=parser.parse_args(argv)
     if args.jobs<1 or args.jobs>256: parser.error('--jobs must be between 1 and 256')
     if args.check_system:
         problems=system_problems();print('\n'.join(problems) if problems else 'Build requirements are available.');return bool(problems)
+    explicit_rom = args.rom is not None
+    if not explicit_rom:
+        args.rom = find_rom()
     if args.validate_rom:
-        if not args.rom: parser.error('--validate-rom requires --rom')
+        if not args.rom: parser.error('No supported ROM found beside the installer or in the working directory; supply --rom')
         try:validate_rom(args.rom);print('Valid Mario Party 2 USA ROM.');return 0
         except (OSError,InstallError) as exc:print(str(exc),file=sys.stderr);return 1
-    if args.gui or args.gui_smoke_test or not args.rom:
+    if args.gui or args.gui_smoke_test or not explicit_rom:
         try:
             from tools.installer_gui import run_gui
             return run_gui(args)

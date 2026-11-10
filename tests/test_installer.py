@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import install
@@ -29,6 +29,63 @@ class InstallerTests(unittest.TestCase):
         for data in (b'',b'x'*len(self.data)):
             self.rom.write_bytes(data)
             with self.assertRaises(install.InstallError):install.validate_rom(self.rom)
+    def test_find_rom_beside_frozen_executable_before_cwd(self):
+        bundle=self.root/'bundle';bundle.mkdir()
+        nearby=bundle/'renamed game.z64';nearby.write_bytes(self.data)
+        with patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(bundle/'installer.exe')),patch.object(Path,'cwd',return_value=self.root):
+            self.assertEqual(install.find_rom(),nearby)
+
+    def test_find_rom_beside_source_script(self):
+        elsewhere=self.root/'cwd';elsewhere.mkdir()
+        with patch.object(sys,'frozen',False,create=True),patch.object(install,'__file__',str(self.root/'install.py')),patch.object(Path,'cwd',return_value=elsewhere):
+            self.assertEqual(install.find_rom(),self.rom)
+
+    def test_find_rom_falls_back_to_cwd_for_each_byte_order(self):
+        bundle=self.root/'bundle';bundle.mkdir()
+        (bundle/'other game.z64').write_bytes(b'x'*len(self.data))
+        (bundle/'short.n64').write_bytes(b'bad')
+        (bundle/'directory.v64').mkdir()
+        for width,extension in ((1,'.Z64'),(2,'.v64'),(4,'.n64')):
+            with self.subTest(extension=extension):
+                self.rom.unlink()
+                self.rom=self.root/('any filename'+extension)
+                self.rom.write_bytes(b''.join(self.data[i:i+width][::-1] for i in range(0,len(self.data),width)))
+                with patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(bundle/'installer')),patch.object(Path,'cwd',return_value=self.root):
+                    self.assertEqual(install.find_rom(),self.rom)
+
+    def test_find_rom_skips_unreadable_candidates(self):
+        blocked=self.root/'aaa.z64';blocked.write_bytes(self.data)
+        validate=install.validate_rom
+        def read(path):
+            if path==blocked:raise PermissionError('unreadable fixture')
+            return validate(path)
+        with patch.object(install,'__file__',str(self.root/'install.py')),patch.object(sys,'frozen',False,create=True),patch.object(Path,'cwd',return_value=self.root),patch.object(install,'validate_rom',side_effect=read):
+            self.assertEqual(install.find_rom(),self.rom)
+
+    def test_find_rom_missing_or_unreadable_directory(self):
+        self.rom.unlink()
+        (self.root/'not a ROM.txt').write_bytes(self.data)
+        with patch.object(sys,'frozen',True,create=True),patch.object(sys,'executable',str(self.root/'missing/installer')),patch.object(Path,'cwd',return_value=self.root):
+            self.assertIsNone(install.find_rom())
+
+    def test_autodetection_keeps_default_gui_and_manual_fallback(self):
+        for rom in (self.rom,None):
+            with self.subTest(rom=rom):
+                gui=Mock(return_value=0)
+                with patch.object(install,'find_rom',return_value=rom),patch.dict(sys.modules,{'tools.installer_gui':SimpleNamespace(run_gui=gui)}),patch.object(install,'Installer') as engine:
+                    self.assertEqual(install.main([]),0)
+                    self.assertEqual(gui.call_args.args[0].rom,rom)
+                    engine.assert_not_called()
+
+    def test_explicit_rom_overrides_autodetection(self):
+        with patch.object(install,'find_rom') as detect:
+            self.assertEqual(install.main(['--rom',str(self.rom),'--validate-rom']),0)
+            detect.assert_not_called()
+
+    def test_validate_autodetected_rom(self):
+        with patch.object(install,'find_rom',return_value=self.rom):
+            self.assertEqual(install.main(['--validate-rom']),0)
+
     def test_install_and_failed_upgrade(self):
         project=self.root/'project';project.mkdir();(project/'install.py').write_text('# authored source')
         (project/'forbidden.bin').write_bytes(b'not for copying')
@@ -70,8 +127,6 @@ class InstallerTests(unittest.TestCase):
         engine=install.Installer(lambda _:None,lambda _:None);engine.cancel()
         with self.assertRaises(install.Cancelled):engine.install(self.rom,self.root/'install')
         self.assertFalse((self.root/'install').exists())
-    def test_cli_validation(self):
-        self.assertEqual(install.main(['--rom',str(self.rom),'--validate-rom']),0)
     def test_gui_drop_local_uri(self):
         try:
             from tools.installer_gui import local_drop_path

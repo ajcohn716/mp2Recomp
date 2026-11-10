@@ -64,7 +64,7 @@ class Window(QMainWindow):
         jobs=QHBoxLayout();jobs.addWidget(QLabel('Parallel build jobs'));self.jobs=QSpinBox();self.jobs.setRange(1,256);self.jobs.setValue(args.jobs);jobs.addWidget(self.jobs)
         self.desktop=QCheckBox('Create application shortcut');self.desktop.setChecked(not args.no_desktop);jobs.addWidget(self.desktop);options.addLayout(jobs)
         self.launch=QCheckBox('Launch when finished');self.launch.setChecked(True);layout.addWidget(self.launch)
-        self.status=QLabel('Ready. Drop your USA ROM above.');self.status.setWordWrap(True);self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);layout.addWidget(self.status)
+        self.status=QLabel('Ready. Review your ROM and install directory, then press Go.' if args.rom else 'Ready. Drop your USA ROM above.');self.status.setWordWrap(True);self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);layout.addWidget(self.status)
         self.progress=QProgressBar();self.progress.setRange(0,1);self.progress.setValue(0);layout.addWidget(self.progress)
         self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setMaximumBlockCount(2000);self.log.setPlaceholderText('Installation progress will appear here.');self.log.setMinimumHeight(120);layout.addWidget(self.log,1)
         actions=QHBoxLayout();self.cancel=QPushButton('Cancel');self.cancel.setEnabled(False);self.cancel.clicked.connect(self.cancel_install);actions.addWidget(self.cancel);actions.addStretch()
