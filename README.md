@@ -9,6 +9,56 @@ scripts only. Supply your own US ROM to generate the game code locally. ROMs,
 assets, screenshots, memory dumps, Ghidra/decompiler output, generated symbol
 tables, generated game/microcode C, compiled binaries, and saves are excluded.
 
+## Installer (Linux and Windows x86-64)
+
+The `Installer release` GitHub Actions workflow builds a self-contained Qt
+installer and a matching dependency pack for each platform. These contain the
+Python interpreter, compiler, build tools and open-source runtime dependencies.
+Players do not need to install Python, Visual Studio, MSYS2 or development
+packages. A working graphics driver with Vulkan support is still required.
+The Windows version is a testing candidate until installation and game boot
+have been verified on a Windows computer.
+
+Download and extract the installer archive. Keep its entire directory intact.
+Open `mp2recomp-installer.exe` on Windows or `mp2recomp-installer` on Linux,
+drag your US ROM onto the window, choose an installation directory and press
+**Go**. The installer validates the ROM, generates the game code locally,
+builds the executable, and can launch it when installation finishes. It accepts
+big-endian `.z64`, byte-swapped `.v64` and little-endian `.n64` copies of the
+supported ROM. Other regions and modified ROMs are rejected.
+
+The same installer supports command-line use:
+
+```sh
+mp2recomp-installer --rom "/path/to/Mario Party 2 (USA).z64" \
+  --prefix "/path/to/mp2recomp" --jobs 4 --launch
+```
+
+On Windows, run `./mp2recomp-installer.exe` in PowerShell with Windows paths.
+Use `--help` for all options, including build/cache locations and shortcuts.
+Your settings and saves survive reinstalling into the same directory.
+
+The matching dependency pack downloads on first use and is checked against
+its release-specific SHA-256 checksum. For offline use, place the SDK archive
+beside the installer executable, or select it in the GUI's advanced options:
+
+```sh
+mp2recomp-installer --rom "/path/to/game.z64" \
+  --dependency-pack "/path/to/mp2recomp-sdk-linux-x86_64.tar.gz"
+```
+
+**Private repository:** automatic downloads cannot authenticate to private
+release assets. Download the matching SDK archive through GitHub while signed
+in, and use the offline method above. Manual workflow runs provide Actions
+artifacts; download both the installer and its platform's SDK artifact, then
+extract the outer artifact ZIPs. The SDK archive itself stays compressed.
+Tagged `v*` builds create a draft release; publishing remains a separate step.
+No ROM, generated game code or game assets are sent to the cloud build.
+
+A developer checkout can use existing system dependencies instead:
+`python install.py --source-build --rom "/path/to/game.z64"`, or add `--gui`.
+The GUI requires `pip install -r tools/installer-requirements.txt` in this mode.
+
 ## Run a local build
 
 From this directory:
@@ -17,7 +67,7 @@ From this directory:
 ./run.sh
 ```
 
-Build first using the instructions below. No executable is distributed here.
+Build first using the instructions below, or use the installer above.
 
 Press **Enter** to skip the opening and reach the title screen. For a repeatable
 title-screen boot with an automatic Start press after 650 VI ticks:
@@ -55,7 +105,7 @@ Master volume, left/right channel levels, and mute are applied to the game audio
 Settings save automatically in `userdata/settings.cfg`; Reset defaults restores
 bindings, volume and deadzone. Escape or Done closes settings. Game input is
 suppressed while settings is open; the game simulation continues. The settings
-window uses the system Noto Sans or DejaVu Sans font (install either package).
+window uses Segoe UI/Arial on Windows and Noto Sans/DejaVu Sans on Linux.
 Run `./tools/test_settings.sh` for the headless settings integration check.
 
 Only controller port 1 is connected. Saves and the runtime's ROM copy live in
@@ -63,10 +113,10 @@ Only controller port 1 is connected. Saves and the runtime's ROM copy live in
 
 ## Rebuild
 
-This proof of concept targets Linux. It was built with Clang, CMake, Ninja,
+Linux boot has been verified with Clang, CMake, Ninja,
 SDL2, SDL2_ttf, GTK3 development libraries, and Vulkan on an AMD RX 7800 XT. The audio
-microcode implementation requires SSE4.1 on x86-64. Building other platforms
-requires replacing the POSIX fiber implementation and adapting the frontend.
+microcode implementation requires SSE4.1 on x86-64. Windows compilation
+is covered by the Windows CI build; actual Windows game boot still needs testing.
 
 Dependencies and exact revisions are recorded in `dependencies.json`. To
 populate a fresh source directory without replacing existing checkouts:
@@ -103,8 +153,8 @@ are local build inputs/outputs and are excluded by `.gitignore`.
   wraps cartridge DMA so a newly loaded overlay updates native function
   lookup. The boot-logo overlay begins at ROM `0x36D9A0`; the title/intro
   overlay begins at `0x3D4D20`, both loaded at RAM `0x80102800`.
-* `src/process.cpp` replaces four Hudson process functions with POSIX
-  `ucontext` fibers. Each process keeps a native stack and a guest register
+* `src/process.cpp` replaces four Hudson process functions with native fibers
+  (`ucontext` on Linux and Win32 fibers on Windows). Each process keeps a native stack and a guest register
   context, preserving suspension through nested recompiled calls. The
   original scheduler's sleep, child-wait, priority-list order, and cleanup
   behavior are retained. This avoids invalid native `setjmp`/`longjmp`
