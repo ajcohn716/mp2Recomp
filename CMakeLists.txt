@@ -13,6 +13,7 @@ include(cmake/Netplay.cmake)
 if(MP2_NETPLAY_ONLY)
     return()
 endif()
+
 find_package(CURL 7.71 REQUIRED)
 add_library(mp2_public_ip STATIC src/public_ip.cpp)
 target_include_directories(mp2_public_ip PUBLIC src)
@@ -95,3 +96,5 @@ if(WIN32)
             "${CMAKE_SOURCE_DIR}/rt64/src/contrib/dxc/bin/x64/${DLL}" "$<TARGET_FILE_DIR:mp2recomp>/${DLL}")
     endforeach()
 endif()
+
+include(cmake/PrebuiltRuntime.cmake)
