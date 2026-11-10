@@ -19,7 +19,9 @@ packages. A working graphics driver with Vulkan support is still required.
 The Windows version is a testing candidate until installation and game boot
 have been verified on a Windows computer.
 
-Download and extract the installer archive. Keep its entire directory intact.
+Download and extract the installer archive. The workflow includes its matching
+SDK archive beside the executable, so this download also works offline. Keep
+its entire directory intact.
 Open `mp2recomp-installer.exe` on Windows or `mp2recomp-installer` on Linux,
 drag your US ROM onto the window, choose an installation directory and press
 **Go**. The installer validates the ROM, generates the game code locally,
@@ -48,10 +50,11 @@ mp2recomp-installer --rom "/path/to/game.z64" \
 ```
 
 **Private repository:** automatic downloads cannot authenticate to private
-release assets. Download the matching SDK archive through GitHub while signed
-in, and use the offline method above. Manual workflow runs provide Actions
-artifacts; download both the installer and its platform's SDK artifact, then
-extract the outer artifact ZIPs. The SDK archive itself stays compressed.
+release assets. Keep the included SDK archive beside the executable. If it is
+missing, download the matching SDK through GitHub while signed in. Manual
+workflow runs provide Actions artifacts: download your platform's installer
+artifact and extract both its outer artifact ZIP and the installer archive
+inside. The SDK archive beside the executable stays compressed.
 Tagged `v*` builds create a draft release; publishing remains a separate step.
 No ROM, generated game code or game assets are sent to the cloud build.
 

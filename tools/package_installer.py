@@ -15,7 +15,7 @@ from tools.dependency_pack import platform_key,sha256
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--metadata',type=Path,required=True)
-    p.add_argument('--tag',required=True);p.add_argument('--repository',default='ajcohn716/mp2Recomp');args=p.parse_args()
+    p.add_argument('--bundle-sdk',action='store_true',help='Include the matching offline SDK beside the installer');p.add_argument('--tag',required=True);p.add_argument('--repository',default='ajcohn716/mp2Recomp');args=p.parse_args()
     subprocess.run([sys.executable,str(ROOT/'tools/audit_repository.py')],cwd=ROOT,check=True)
     source=ROOT/'build/installer-source';source.mkdir(parents=True,exist_ok=True)
     for name in source_files():
@@ -33,6 +33,10 @@ def main():
         '--distpath',str(dist),'--add-data',str(source)+os.pathsep+'source',
         '--hidden-import','tools.installer_gui',str(ROOT/'install.py')],cwd=ROOT,check=True)
     folder=dist/'mp2recomp-installer'
+    if args.bundle_sdk:
+        entry=packs[platform_key()];sdk=args.metadata/entry['filename']
+        if sha256(sdk)!=entry['sha256']:raise SystemExit('SDK checksum does not match metadata')
+        shutil.copy2(sdk,folder/entry['filename'])
     name='mp2recomp-installer-'+platform_key()
     if os.name=='nt':archive=Path(shutil.make_archive(str(ROOT/'dist'/name),'zip',folder))
     else:

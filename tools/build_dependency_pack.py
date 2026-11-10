@@ -16,7 +16,9 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--toolchain',type=Path,required=True);p.add_argument('--python',type=Path,required=True)
     p.add_argument('--platform',required=True);p.add_argument('--output',type=Path,default=ROOT/'dist');p.add_argument('--jobs',default='3');args=p.parse_args()
     args.output=args.output.resolve();args.output.mkdir(parents=True,exist_ok=True)
-    stage=args.output/'sdk-stage';stage.mkdir(exist_ok=True)
+    stage=args.output/'sdk-stage'
+    if stage.exists():shutil.rmtree(stage)
+    stage.mkdir()
     def copytree(source,target):
         shutil.copytree(source,target,dirs_exist_ok=True,symlinks=True,ignore=shutil.ignore_patterns('.git','.github','.venv','__pycache__'))
     windows=args.platform.startswith('windows')

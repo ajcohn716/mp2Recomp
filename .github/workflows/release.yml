@@ -85,7 +85,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('test-{0}', github.run_id) }}
           REPOSITORY: ${{ github.repository }}
-        run: python tools/package_installer.py --metadata dist/metadata --tag "$env:RELEASE_TAG" --repository "$env:REPOSITORY"
+        run: python tools/package_installer.py --bundle-sdk --metadata dist/metadata --tag "$env:RELEASE_TAG" --repository "$env:REPOSITORY"
         shell: pwsh
       - name: Test packaged CLI and GUI
         env:
