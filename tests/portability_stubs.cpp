@@ -1,4 +1,5 @@
 // Authored no-ROM link fixtures. Never used by the actual game build.
+#include <cstdlib>
 #include "recomp.h"
 #include "librecomp/rsp.hpp"
 extern "C" {

@@ -21,9 +21,9 @@ set(RT64_SDL_WINDOW_VULKAN ON CACHE BOOL "" FORCE)
 add_subdirectory(rt64)
 add_subdirectory(runtime)
 if(MINGW)
-    target_compile_options(rt64 PUBLIC "$<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>"
-        "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include objbase.h>"
-        "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include cmath>")
+    target_compile_options(plume PUBLIC "$<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>"
+        "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include \"${CMAKE_SOURCE_DIR}/src/mingw_compat.hpp\">")
+    target_link_libraries(rt64 PUBLIC dwmapi d3dcompiler)
     target_compile_options(rabbitizer PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-include;cstdlib>")
     include(cmake/MinGWCompat.cmake)
     target_include_directories(plume BEFORE PUBLIC

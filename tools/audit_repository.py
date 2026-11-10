@@ -12,6 +12,7 @@ ALLOWED = {
     ".github/workflows/release.yml",
     "tools/dependency-environment.yml",
     "src/fiber.hpp",
+    "src/mingw_compat.hpp",
     "src/self_test.cpp",
     "tests/portability_stubs.cpp",
     "tests/fixture_funcs.h",
