@@ -1,4 +1,5 @@
 #include <SDL.h>
+#include "settings.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -39,7 +40,7 @@ void queue_audio(int16_t* samples, size_t count) {
     }
     last_audio_frames = count / 2;
     std::vector<int16_t> swapped(count);
-    for (size_t i = 0; i < count; ++i) swapped[i] = samples[i ^ 1];
+    for (size_t i = 0; i < count; ++i) swapped[i] = int16_t(samples[i ^ 1] * settings::gain(int(i % 2)));
     SDL_QueueAudio(audio_device, swapped.data(), count * sizeof(int16_t));
 }
 size_t audio_remaining() {
@@ -60,23 +61,14 @@ ultramodern::input::connected_device_info_t connected(int port) {
 }
 void update_gfx(void*) {
     SDL_Event event;
-    while (SDL_PollEvent(&event)) if (event.type == SDL_QUIT) ultramodern::quit();
-    auto* keys = SDL_GetKeyboardState(nullptr);
-    if (keys[SDL_SCANCODE_ESCAPE]) ultramodern::quit();
-    uint16_t b = 0;
-    if (keys[SDL_SCANCODE_RETURN]) b |= 0x1000;
-    if (keys[SDL_SCANCODE_X] || keys[SDL_SCANCODE_SPACE]) b |= 0x8000;
-    if (keys[SDL_SCANCODE_C]) b |= 0x4000;
-    if (keys[SDL_SCANCODE_Z]) b |= 0x2000;
-    if (keys[SDL_SCANCODE_Q]) b |= 0x0020;
-    if (keys[SDL_SCANCODE_E]) b |= 0x0010;
-    if (keys[SDL_SCANCODE_I]) b |= 0x0008;
-    if (keys[SDL_SCANCODE_K]) b |= 0x0004;
-    if (keys[SDL_SCANCODE_J]) b |= 0x0002;
-    if (keys[SDL_SCANCODE_L]) b |= 0x0001;
-    buttons.store(b);
-    stick_x = float(keys[SDL_SCANCODE_RIGHT]) - float(keys[SDL_SCANCODE_LEFT]);
-    stick_y = float(keys[SDL_SCANCODE_UP]) - float(keys[SDL_SCANCODE_DOWN]);
+    while (SDL_PollEvent(&event)) {
+        if (settings::event(event)) continue;
+        if (event.type == SDL_QUIT) ultramodern::quit();
+        if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) ultramodern::quit();
+    }
+    uint16_t b; float x, y;
+    settings::update(b, x, y);
+    buttons.store(b); stick_x = x; stick_y = y;
 }
 void vi_callback() {
     unsigned count = ++vi_count;
@@ -92,9 +84,11 @@ RspUcodeFunc* get_ucode(const OSTask* task) {
 }
 
 int main(int argc, char** argv) {
+    bool open_settings = false;
     std::filesystem::path rom = "Mario Party 2 (USA).z64";
     for (int i = 1; i < argc; ++i) {
-        if (std::string_view(argv[i]) == "--rom" && i+1 < argc) rom = argv[++i];
+        if (std::string_view(argv[i]) == "--settings") open_settings = true;
+        else if (std::string_view(argv[i]) == "--rom" && i+1 < argc) rom = argv[++i];
         else if (std::string_view(argv[i]) == "--frames" && i+1 < argc) quit_after = std::stoul(argv[++i]);
         else if (std::string_view(argv[i]) == "--auto-start" && i+1 < argc) auto_start_at = std::stoul(argv[++i]);
     }
@@ -106,6 +100,8 @@ int main(int argc, char** argv) {
     auto config_dir = std::filesystem::absolute("userdata");
     std::filesystem::create_directories(config_dir);
     recomp::register_config_path(config_dir);
+    settings::init(config_dir);
+    if (open_settings) settings::toggle();
     register_mp2_overlays();
     recomp::register_game({
         .rom_hash = 0xd2dbfb3b4d7a5e81ULL,
@@ -137,6 +133,7 @@ int main(int argc, char** argv) {
     recomp::start_game(u8"mp2.us", "");
     recomp::start(config);
     if (audio_device) SDL_CloseAudioDevice(audio_device);
+    settings::shutdown();
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

@@ -15,6 +15,8 @@ ALLOWED = {
     "run.sh",
     "src/guest_memory.hpp",
     "src/main.cpp",
+    "src/settings.cpp",
+    "src/settings.hpp",
     "src/overlays.cpp",
     "src/platform.cpp",
     "src/process.cpp",
