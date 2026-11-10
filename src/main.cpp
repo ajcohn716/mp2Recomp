@@ -179,7 +179,7 @@ int main(int argc, char** argv) try {
         else if (argument == "--netplay" || argument == "--host") multiplayer = true;
         else if (argument == "--netplay-connect") { multiplayer = true; connect_immediately = true; }
         else if (argument == "--join") { multiplayer = true; network.code = value(); }
-        else if (argument == "--host-address") network.address = value();
+        else if (argument == "--host-address") { network.address = value(); network.detect_public_ip = false; }
         else if (argument == "--host-port") { auto port = std::stoul(value()); if (port == 0 || port > 65535) throw std::runtime_error("Host port must be 1..65535"); network.port = uint16_t(port); }
         else if (argument == "--data-dir") data_directory = value();
         else if (argument == "--netplay-trace") trace = value();

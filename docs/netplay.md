@@ -4,8 +4,11 @@ Experimental input netplay for two to four players using the supported Mario
 Party 2 USA ROM. Each player runs the game locally and owns one N64 controller
 port. One player's computer hosts the room and distributes agreed input frames.
 
-There is no shared room server, relay, matchmaking backend, account service,
-STUN service or public-IP lookup. The client never contacts any of those services.
+There is no shared room server, relay, matchmaking backend, account service or
+STUN service. Opening Netplay with the default host address makes a background
+HTTPS request to `https://ipv4.icanhazip.com/` to prefill your public IPv4 address.
+The service sees your outbound IP; no ROM, save, session key or connection code
+is sent to it. Lookup has a five-second timeout, and failure allows manual entry.
 The host listens on one TCP port. A shareable connection code contains the host
 address, port and a fresh random session key, so it is longer than a short lobby
 code. Code generation and joining don't require third-party infrastructure.
@@ -15,10 +18,10 @@ code. Code generation and joining don't require third-party infrastructure.
 1. Forward TCP port **7777** on your router to your gaming computer's LAN IP.
    Allow inbound TCP 7777 through that computer's firewall. Use a stable LAN IP
    or router DHCP reservation so the forwarding rule stays valid.
-2. Find your router's public IP address yourself, or use a DNS name you control
-   that points to it. The app doesn't discover your public address externally.
-3. Press **F1**, select **Netplay**, and enter that public IP/DNS name and TCP
-   port. You can also open this tab before boot with `./run.sh --netplay`
+2. Press **F1**, select **Netplay**, and let the host address fill in automatically.
+   Use **Detect public IP** to retry if needed. You can also enter your public
+   IP manually or use a DNS name you control that points to it.
+3. Check the host address and TCP port. You can open this tab before boot with `./run.sh --netplay`
    (installed Linux: `./play --netplay`; Windows: `mp2recomp.exe --netplay`).
 4. Click **Create room**, then **Copy code**. Share the whole `MP2-...` code
    privately with friends. It grants access to this session.
@@ -32,8 +35,10 @@ need to forward a port, run a service, or enter a separate address. The address
 fields are for creating a room; joining reads the address from the code.
 
 For LAN play, advertise the host's LAN IP instead; no router forwarding is
-needed. `127.0.0.1` works only when all clients run on the same computer. The
-initial address field uses that local-test default; replace it for online play.
+needed. `127.0.0.1` works only when all clients run on the same computer.
+Typing or pasting a host address prevents an in-flight lookup from replacing it.
+Explicit `--host-address` values skip automatic lookup, including `127.0.0.1`
+for local testing. Pasting a friend's code does not need a successful lookup.
 An alternative port can be chosen, but the router's external and internal port
 numbers must match the advertised port in this version.
 
@@ -53,6 +58,9 @@ Some ISPs put customers behind carrier-grade NAT, where router forwarding alone
 cannot expose the host's port. In that case another player with a reachable
 connection must host, or the host must arrange a public address with their ISP.
 There is deliberately no relay fallback.
+Public-IP detection does not configure port forwarding or bypass carrier-grade NAT.
+If a VPN is active, the detected address may be the VPN's exit address; check
+that it is the address on which your forwarded port can actually be reached.
 
 Each player's usual keyboard/controller bindings apply to their assigned port.
 F1 opens settings; settings suppress that player's input while the game continues.
@@ -97,8 +105,8 @@ codes; keep them private. Session codes are never used as save-directory names.
 ## Build and test
 
 `tools/bootstrap.py` fetches pinned libdatachannel source and submodules.
-OpenSSL development files are required alongside existing build dependencies.
-The installer SDK and CI recipes include the new source and OpenSSL.
+OpenSSL and libcurl (7.71 or newer) development files are required alongside existing
+build dependencies. The installer SDK and CI recipes include both libraries.
 After changing recompiler hooks in `mp2.toml`, regenerate game code locally.
 The transport tests don't need a ROM or Vulkan:
 

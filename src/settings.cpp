@@ -1,4 +1,5 @@
 #include "settings.hpp"
+#include "public_ip.hpp"
 #include <SDL_ttf.h>
 #include <algorithm>
 #include <array>
@@ -8,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <future>
 
 namespace settings {
 namespace {
@@ -51,6 +53,19 @@ netplay::Options network;
 std::string port{"7777"};
 int field{-1};
 netplay::Status room;
+std::future<std::string> public_ip;
+unsigned address_revision{}, lookup_revision{};
+bool lookup_attempted{};
+std::string lookup_status;
+void detect_public_ip() {
+    if(public_ip.valid())return;
+    lookup_attempted=true;lookup_revision=address_revision;
+    try {
+        public_ip=std::async(std::launch::async,netplay::lookup_public_ipv4);
+        lookup_status="Looking up public IPv4...";
+    } catch(...) {lookup_status="IP lookup unavailable. Enter your address manually.";}
+    dirty=true;
+}
 constexpr int width=800, height=740;
 void text_input() {
     if(open && page==Page::Netplay && field>=0)SDL_StartTextInput();else SDL_StopTextInput();
@@ -169,6 +184,8 @@ void draw() {
             text(24,176,"Host's public IP / DNS name");text(640,176,"TCP port");
             field_box(0,24,204,592,34,network.address);field_box(1,640,204,130,34,port);
             button(24,254,190,"Create room");
+            button(236,254,190,public_ip.valid()?"Looking up IP...":"Detect public IP");
+            clipped_text(24,286,746,lookup_status);
             text(24,320,"Join with a connection code");field_box(2,24,352,746,90,network.code);
             button(24,458,190,"Join room");
             text(24,522,"Host: forward the TCP port above to this computer.");
@@ -248,6 +265,7 @@ void set_game_window(SDL_Window* value){game_window=value;}
 void set_netplay(NetplayActions actions,const netplay::Options& initial) {
     network_actions=std::move(actions);network=initial;port=std::to_string(initial.port);
     room=network_actions.status?network_actions.status():netplay::Status{};
+    ++address_revision;lookup_attempted=false;lookup_status.clear();
     field=-1;status.clear();dirty=true;text_input();
 }
 void show(Page next){if(drag>=0)save();if(!open)toggle();change_page(next);}
@@ -285,6 +303,9 @@ bool event(const SDL_Event& e) {
             else if(field>=0) {
                 auto& target=field==0?network.address:field==1?port:network.code;
                 bool ctrl=(e.key.keysym.mod&(KMOD_CTRL|KMOD_GUI))!=0;
+                if(field==0&&(key==SDL_SCANCODE_BACKSPACE||(ctrl&&(key==SDL_SCANCODE_A||key==SDL_SCANCODE_V)))) {
+                    ++address_revision;lookup_attempted=true;lookup_status.clear();
+                }
                 if(key==SDL_SCANCODE_BACKSPACE&&!target.empty())target.pop_back();
                 if(key==SDL_SCANCODE_A&&ctrl)target.clear();
                 if(key==SDL_SCANCODE_V&&ctrl){char* clip=SDL_GetClipboardText();if(clip){if(target.size()+std::char_traits<char>::length(clip)<=512)target+=clip;SDL_free(clip);}}
@@ -295,6 +316,7 @@ bool event(const SDL_Event& e) {
     if(e.type==SDL_TEXTINPUT&&e.text.windowID==id&&page==Page::Netplay&&field>=0) {
         auto& target=field==0?network.address:field==1?port:network.code;
         std::string value=e.text.text;
+        if(field==0){++address_revision;lookup_attempted=true;lookup_status.clear();}
         if(target.size()+value.size()<=512)target+=value;
         dirty=true;
     }
@@ -330,6 +352,7 @@ bool event(const SDL_Event& e) {
                 if(hit(x,y,640,204,130,34))field=1;
                 if(hit(x,y,24,352,746,90))field=2;
                 if(hit(x,y,24,254,190,26))connect(true);
+                if(hit(x,y,236,254,190,26))detect_public_ip();
                 if(hit(x,y,24,458,190,26))connect(false);
                 text_input();dirty=true;
             } else {
@@ -363,6 +386,18 @@ void update(uint16_t& b,float& x,float& y) {
         }
     }
     if(open){
+        if(page==Page::Netplay) {
+            if(public_ip.valid()&&public_ip.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+                std::string address;
+                try {address=public_ip.get();}catch(...){}
+                if(lookup_revision==address_revision&&!room_active()) {
+                    if(!address.empty()) {network.address=address;lookup_status="Public IPv4 detected. Port forwarding is still required.";}
+                    else lookup_status="Could not detect public IP. Enter it manually or retry.";
+                }
+                dirty=true;
+            }
+            if(!lookup_attempted&&!room_active()&&network_actions.connect&&network.detect_public_ip&&network.code.empty()&&network.address=="127.0.0.1")detect_public_ip();
+        }
         static Uint32 last_poll{};
         if(page==Page::Netplay&&network_actions.status&&SDL_GetTicks()-last_poll>=100){room=network_actions.status();dirty=true;last_poll=SDL_GetTicks();}
         if(dirty)draw();return;

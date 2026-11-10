@@ -90,9 +90,10 @@ def main():
     subprocess.run([cmake,'--fresh','-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
         '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
-    subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','netplay_test','-j',args.jobs,'--','-k','0'],env=env,check=True)
+    subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','netplay_test','public_ip_test','-j',args.jobs,'--','-k','0'],env=env,check=True)
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
     subprocess.run([str(check/('netplay_test'+suffix))],env=env,check=True)
+    subprocess.run([str(check/('public_ip_test'+suffix))],env=env,check=True)
     if not windows:
         from install import install_runtime_libraries
         import tempfile

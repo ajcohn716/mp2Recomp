@@ -61,7 +61,7 @@ def system_problems():
     for command in ('git', 'cmake', 'ninja', 'clang', 'clang++', 'pkg-config', 'rg'):
         if not shutil.which(command): problems.append('Missing command: ' + command)
     if os.name!='nt' and shutil.which('pkg-config'):
-        for package in ('sdl2', 'SDL2_ttf', 'gtk+-3.0', 'openssl'):
+        for package in ('sdl2', 'SDL2_ttf', 'gtk+-3.0', 'openssl', 'libcurl'):
             if subprocess.run(['pkg-config','--exists',package]).returncode:
                 problems.append('Missing development package: ' + package)
     try:

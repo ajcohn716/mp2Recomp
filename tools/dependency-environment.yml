@@ -23,6 +23,7 @@ dependencies:
   - zlib
   - expat
   - openssl=3
+  - libcurl
   - patchelf
   - conda-pack=0.8
   - pip:

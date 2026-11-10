@@ -144,12 +144,16 @@ See [debug controls and artifact format](docs/debugging.md).
 ## Experimental room multiplayer
 
 Launch `./run.sh --netplay` (installed Linux: `./play --netplay`; Windows:
-`mp2recomp.exe --netplay`). The host enters their public IP/DNS name and forwards
-TCP port 7777, creates a room, and copies its connection code. Friends paste the
+`mp2recomp.exe --netplay`). The host's public IPv4 is filled in automatically;
+it can be replaced with a LAN IP or DNS name. The host forwards TCP port 7777,
+creates a room, and copies its connection code. Friends paste the
 code to join, then the host starts. Two to four clients synchronize N64 controller
 inputs over encrypted direct connections. Each player controls one assigned port.
 
-No shared backend, relay, matchmaking or public-IP lookup service is used.
+No shared room backend, relay or matchmaking service is used. Opening Netplay
+with the default host address makes an HTTPS request to `ipv4.icanhazip.com`
+to prefill it; **Detect public IP** retries. Manual addresses and explicit
+`--host-address` values are preserved. Lookup failure allows manual entry.
 Connection codes contain the host address and session key, so share them privately.
 See [netplay setup, port forwarding and tests](docs/netplay.md). Session saves
 are isolated from offline saves. This is experimental; complete boards/minigames,
@@ -158,7 +162,7 @@ separate home networks and Linux/Windows cross-play still need validation.
 ## Rebuild
 
 Linux boot has been verified with Clang, CMake, Ninja,
-SDL2, SDL2_ttf, GTK3 and OpenSSL development libraries, and Vulkan on an AMD RX 7800 XT. The audio
+SDL2, SDL2_ttf, GTK3, OpenSSL and libcurl development libraries, and Vulkan on an AMD RX 7800 XT. The audio
 microcode implementation requires SSE4.1 on x86-64. Windows compilation
 is covered by the Windows CI build; actual Windows game boot still needs testing.
 

@@ -14,6 +14,7 @@ and their recursive submodules for development builds.
 | DirectX-Headers | MIT | https://github.com/microsoft/DirectX-Headers |
 | libdatachannel | MPL-2.0; bundled components have their own licenses | https://github.com/paullouisageneau/libdatachannel |
 | OpenSSL 3 | Apache-2.0 | https://github.com/openssl/openssl |
+| libcurl | curl license (MIT-style) | https://curl.se/ |
 | SDL2 and SDL2_ttf | zlib | https://github.com/libsdl-org |
 | Python | PSF-2.0 and bundled notices | https://www.python.org/ |
 | PySide6 / Qt | LGPL-3.0 / GPL-3.0 and module-specific terms | https://code.qt.io/ |

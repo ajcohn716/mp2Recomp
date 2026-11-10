@@ -17,6 +17,7 @@ struct Options {
     std::string address = "127.0.0.1"; // public IP/DNS to advertise in the code
     uint16_t port = 7777; // host forwards this TCP port to their computer
     std::string code; // empty creates a room
+    bool detect_public_ip{true}; // UI only; explicit addresses disable automatic lookup
 };
 // Validate fields without opening a socket or ending an offline game.
 void validate_options(const Options&);
