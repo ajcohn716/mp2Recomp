@@ -13,10 +13,11 @@ dependencies:
   - cmake=4
   - ninja
   - pkg-config
-  - sdl2=2
+  - sdl2=2.30
   - sdl2_ttf=2
   - gtk3
   - glib
+  - zlib
   - conda-pack=0.8
   - pip:
       - splat64[mips]==0.50.1
