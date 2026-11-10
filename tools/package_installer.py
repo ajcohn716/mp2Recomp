@@ -33,6 +33,10 @@ def main():
         '--distpath',str(dist),'--add-data',str(source)+os.pathsep+'source',
         '--hidden-import','tools.installer_gui',str(ROOT/'install.py')],cwd=ROOT,check=True)
     folder=dist/'mp2recomp-installer'
+    if os.name=='nt':
+        required={'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll'}
+        missing=required-{p.name.lower() for p in folder.rglob('*.dll')}
+        if missing:raise SystemExit('Missing Qt/DXC runtime libraries: '+', '.join(sorted(missing)))
     if args.bundle_sdk:
         entry=packs[platform_key()];sdk=args.metadata/entry['filename']
         if sha256(sdk)!=entry['sha256']:raise SystemExit('SDK checksum does not match metadata')

@@ -89,6 +89,9 @@ jobs:
           pattern: sdk-*
           merge-multiple: true
           path: dist/metadata
+      - name: Install Linux Qt packaging and display dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxcb-shape0 libxcb-util1 libxcb-cursor0 libxkbcommon-x11-0 xvfb xauth
       - name: Install packaging tools
         run: python -m pip install -r tools/installer-requirements.txt
       - name: Build self-contained GUI and CLI installer
@@ -105,7 +108,11 @@ jobs:
           $exe = if ($IsWindows) {'dist/installer/mp2recomp-installer/mp2recomp-installer.exe'} else {'dist/installer/mp2recomp-installer/mp2recomp-installer'}
           & $exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $exe --gui-smoke-test
+          if ($IsWindows) { & $exe --gui-smoke-test }
+          else {
+            $env:QT_QPA_PLATFORM = 'xcb'
+            xvfb-run -a $exe --gui-smoke-test
+          }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload installers
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
