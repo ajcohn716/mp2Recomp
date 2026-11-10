@@ -108,8 +108,19 @@ class Installer:
         self.log('$ ' + shlex.join(map(str, command)))
         with self.process_lock:
             self.check_cancelled()
-            process = self.process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, errors='replace', start_new_session=True)
+            # Frozen Qt's DLL search directory must not leak into SDK subprocesses.
+            previous=None
+            if os.name=='nt' and getattr(sys,'frozen',False):
+                import ctypes
+                buffer=ctypes.create_unicode_buffer(32768)
+                ctypes.windll.kernel32.GetDllDirectoryW(len(buffer),buffer)
+                previous=buffer.value
+                ctypes.windll.kernel32.SetDllDirectoryW(None)
+            try:
+                process = self.process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, text=True, errors='replace', start_new_session=True)
+            finally:
+                if previous is not None:ctypes.windll.kernel32.SetDllDirectoryW(previous)
         try:
             for line in process.stdout: self.log(line.rstrip())
             result = process.wait()
@@ -212,6 +223,7 @@ class Installer:
                 library_dir.mkdir(exist_ok=True)
                 pattern='*.dll' if os.name=='nt' else '*.so*'
                 search=[sdk/'toolchain'/('bin' if os.name=='nt' else 'lib'),source/'rt64/src/contrib/dxc'/('bin/x64' if os.name=='nt' else 'lib/x64')]
+                if os.name=='nt':search+=[sdk/'python']
                 for directory in search:
                     for library in directory.glob(pattern):
                         if library.is_file():shutil.copy2(library,library_dir/library.name)

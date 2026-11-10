@@ -102,5 +102,5 @@ def sdk_environment(root,data=None):
     env['CMAKE_PREFIX_PATH']=str(prefix)
     env['CONDA_PREFIX']=str(prefix)
     env['PKG_CONFIG_PATH']=str(prefix/'lib/pkgconfig')
-    if os.name!='nt':env['LD_LIBRARY_PATH']=str(prefix/'lib')+os.pathsep+env.get('LD_LIBRARY_PATH','')
+    if os.name!='nt':env['LD_LIBRARY_PATH']=str(prefix/'lib')+os.pathsep+env.get('LD_LIBRARY_PATH_ORIG',env.get('LD_LIBRARY_PATH','') if not getattr(__import__('sys'),'frozen',False) else '')
     return env

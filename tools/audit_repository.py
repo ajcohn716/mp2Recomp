@@ -24,6 +24,7 @@ ALLOWED = {
     "tools/package_installer.py",
     "tests/test_installer.py",
     "CMakeLists.txt",
+    "cmake/MinGWCompat.cmake",
     "README.md",
     "aspMain.toml",
     "dependencies.json",

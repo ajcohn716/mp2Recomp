@@ -21,6 +21,7 @@ set(RT64_SDL_WINDOW_VULKAN ON CACHE BOOL "" FORCE)
 add_subdirectory(rt64)
 add_subdirectory(runtime)
 if(MINGW)
+    include(cmake/MinGWCompat.cmake)
     target_include_directories(plume BEFORE PUBLIC
         ${CMAKE_SOURCE_DIR}/directx-headers/include
         ${CMAKE_SOURCE_DIR}/directx-headers/include/directx
@@ -63,4 +64,11 @@ if(WIN32)
 else()
     target_link_libraries(mp2recomp PRIVATE PkgConfig::SDL2_TTF)
     target_link_options(mp2recomp PRIVATE -rdynamic)
+endif()
+
+if(WIN32)
+    foreach(DLL dxcompiler.dll dxil.dll)
+        add_custom_command(TARGET mp2recomp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/rt64/src/contrib/dxc/bin/x64/${DLL}" "$<TARGET_FILE_DIR:mp2recomp>/${DLL}")
+    endforeach()
 endif()
