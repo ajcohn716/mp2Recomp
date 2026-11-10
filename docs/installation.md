@@ -15,9 +15,11 @@ Windows installation and actual game boot still need testing on a Windows comput
    `mp2recomp-installer-windows-x86_64.zip` on Windows.
 2. Extract the whole archive. Keep its files together, including the compressed
    SDK archive beside the installer. The SDK is the bundled dependency pack;
-   you do not need to extract it separately.
+   you do not need to extract it separately. Put your ROM beside the installer
+   executable for automatic detection.
 3. Open `mp2recomp-installer` on Linux or `mp2recomp-installer.exe` on Windows.
-   Drag your ROM onto the window, choose an installation directory, and press **Go**.
+   Confirm the detected ROM (or drag your ROM onto the window), choose an
+   installation directory, and press **Go**.
 4. Wait for **Installed. Ready to play.** The installer can launch the game when
    it finishes. Later, use the application shortcut, `./play` from the Linux
    installation directory, or `mp2recomp.exe` on Windows.
@@ -26,6 +28,11 @@ The installer accepts `.z64`, `.v64`, and `.n64` copies of the supported ROM and
 converts the byte order locally. Other regions and modified ROMs are rejected.
 The supported big-endian ROM has SHA-1
 `166eda1c05670d337e2c3f15a5db528ae1e5d6e3` and is 32 MiB.
+
+Automatic detection checks `.z64`, `.v64`, and `.n64` files beside the installer
+executable first, then in the current working directory. Filenames and extension
+case do not matter; only a ROM that passes validation is selected. If none is
+found, drag a ROM onto the window or click the drop area to browse for one.
 
 ## Upgrade and keep your saves
 
@@ -51,6 +58,11 @@ On Windows, in PowerShell:
 
 Use `--help` for build/cache locations, shortcuts, and other options. Lower
 `--jobs` if compilation uses too much memory.
+
+Providing `--rom` selects that file and starts a terminal installation; add
+`--gui` to open the window with that file selected instead. Without `--rom`,
+the installer opens the GUI with any automatically detected ROM selected.
+Use `--validate-rom` to check an automatically detected ROM without installing.
 
 ## Offline installation and dependency packs
 

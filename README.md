@@ -24,8 +24,11 @@ driver** and your own unmodified **Mario Party 2 USA ROM**. The installer accept
    `mp2recomp-installer-windows-x86_64.zip` for your platform.
 2. Extract the whole archive and keep its files together. Leave the included
    SDK archive compressed beside the installer; it contains the build tools.
+   Put your ROM in the same folder as the installer executable to have it
+   detected automatically.
 3. Open `mp2recomp-installer` on Linux or `mp2recomp-installer.exe` on Windows.
-   Drag your ROM onto the window, choose an installation directory, and press **Go**.
+   Confirm the detected ROM (or drag your ROM onto the window), choose an
+   installation directory, and press **Go**.
 4. Wait for **Installed. Ready to play.** The installer can launch the game when
    it finishes. Press **Enter** to skip the opening; use the **arrow keys** to
    move and **X** or **Space** for A. Press **F1** for settings.
