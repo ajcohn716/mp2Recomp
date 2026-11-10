@@ -23,6 +23,10 @@ def load_sdk(root):
     for key in ('python','cmake','ninja','cc','cxx','recompiler','rsp'):
         path=(root/data['tools'][key]).resolve()
         if not path.is_relative_to(root) or not path.is_file():raise RuntimeError('Dependency pack is incomplete: '+key)
+    if data.get('prebuilt_runtime'):
+        path=(root/data['prebuilt_runtime']).resolve()
+        if not path.is_relative_to(root) or not (path/'runtime.json').is_file():
+            raise RuntimeError('Dependency pack has an invalid prebuilt runtime path')
     return data
 
 def extract_archive(archive,dest):

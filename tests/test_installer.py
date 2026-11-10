@@ -174,4 +174,52 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'Unsafe path'):extract_archive(archive,destination)
         self.assertFalse((self.root/'outside').exists())
 
+    def test_prebuilt_runtime_install_and_stale_pack_rejection(self):
+        import json
+        from tools.prebuilt_runtime import RECIPE_FILES,recipe_digest,runtime_targets
+        from tools.dependency_pack import load_sdk,platform_key
+        project=self.root/'project';project.mkdir()
+        for name in RECIPE_FILES:
+            target=project/name;target.parent.mkdir(parents=True,exist_ok=True)
+            target.write_bytes((install.ROOT/name).read_bytes())
+        sdk=self.root/'sdk';sdk.mkdir()
+        tools={name:'tools/'+name for name in ('python','cmake','ninja','cc','cxx','recompiler','rsp','patchelf')}
+        for name in tools.values():
+            target=sdk/name;target.parent.mkdir(exist_ok=True);target.write_text('synthetic tool')
+        for name in ('N64Recomp','runtime','rt64','decomp','directx-headers','libdatachannel'):
+            (sdk/'sources'/name).mkdir(parents=True)
+        runtime=sdk/'runtime';(runtime/'libraries').mkdir(parents=True)
+        libraries={}
+        for name in runtime_targets(project):
+            data=b'synthetic archive';(runtime/'libraries'/(name+'.a')).write_bytes(data)
+            libraries[name]=hashlib.sha256(data).hexdigest()
+        metadata={'format':1,'recipe':recipe_digest(project),'libraries':libraries}
+        (runtime/'runtime.json').write_text(json.dumps(metadata))
+        (sdk/'sdk.json').write_text(json.dumps({'format':1,'platform':platform_key(),
+            'tools':tools,'prebuilt_runtime':'runtime'}))
+        commands=[]
+        def run(command,cwd,env=None):
+            commands.append(command)
+            if command[1:2]==['--build']:
+                binary=cwd/'build/native'/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')
+                binary.parent.mkdir(parents=True,exist_ok=True);binary.write_text('synthetic executable')
+        with patch.object(install,'ROOT',project),patch.object(install,'source_files',return_value=list(RECIPE_FILES)),\
+             patch('tools.dependency_pack.ensure_sdk',return_value=sdk),\
+             patch.object(install,'install_runtime_libraries'):
+            engine=install.Installer(lambda _:None,lambda _:None);engine.run=run
+            prefix=self.root/'installed'
+            engine.install(self.rom,prefix,self.root/'build',desktop=False)
+            self.assertTrue(any('-DMP2_PREBUILT_RUNTIME='+str(runtime) in cmd for cmd in commands))
+            self.assertTrue(any('tools/regenerate.py' in cmd for cmd in commands))
+            before=(prefix/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')).read_bytes()
+            metadata['recipe']='stale';(runtime/'runtime.json').write_text(json.dumps(metadata))
+            commands.clear()
+            with self.assertRaisesRegex(RuntimeError,'does not match'):
+                engine.install(self.rom,prefix,self.root/'build',desktop=False)
+            self.assertEqual(commands,[])
+            self.assertEqual((prefix/('mp2recomp.exe' if os.name=='nt' else 'mp2recomp')).read_bytes(),before)
+        data=json.loads((sdk/'sdk.json').read_text());data['prebuilt_runtime']='../outside'
+        (sdk/'sdk.json').write_text(json.dumps(data))
+        with self.assertRaisesRegex(RuntimeError,'invalid prebuilt runtime path'):load_sdk(sdk)
+
 if __name__=='__main__':unittest.main()

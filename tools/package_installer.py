@@ -12,6 +12,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from install import source_files
 from tools.dependency_pack import platform_key,sha256
+from tools.prebuilt_runtime import recipe_digest
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--metadata',type=Path,required=True)
@@ -25,7 +26,10 @@ def main():
         target=source/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
     packs={}
     for item in args.metadata.glob('mp2recomp-sdk-*.json'):
-        entry=json.loads(item.read_text());entry['url']=f'https://github.com/{args.repository}/releases/download/{args.tag}/{entry["filename"]}'
+        entry=json.loads(item.read_text())
+        if entry.get('runtime_recipe')!=recipe_digest(source):
+            raise SystemExit('SDK runtime recipe mismatch: '+item.name+'. Rebuild SDKs for this release.')
+        entry['url']=f'https://github.com/{args.repository}/releases/download/{args.tag}/{entry["filename"]}'
         packs[entry.pop('platform')]=entry
     if platform_key() not in packs:raise SystemExit('Missing SDK metadata for '+platform_key())
     (source/'release-catalog.json').write_text(json.dumps({'format':1,'packs':packs},indent=2))
