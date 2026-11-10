@@ -131,6 +131,9 @@ def install_runtime_libraries(sdk,source,prefix):
     library_dir.mkdir(parents=True,exist_ok=True)
     from tools.steam_sdk import install_helper
     install_helper(sdk,prefix,source)
+    for name in ('LICENSE','LICENSE-STEAM-HELPER','THIRD_PARTY_NOTICES.md'):
+        notice=source/name
+        if notice.is_file():shutil.copy2(notice,prefix/name)
     if os.name!='nt':
         install_linux_runtime_data(sdk,prefix)
         for subdir in ('pulseaudio','libdecor'):
