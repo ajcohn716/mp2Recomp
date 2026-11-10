@@ -142,7 +142,7 @@ void toggle() {
     if(open){open=false;capture=-1;SDL_HideWindow(window);return;}
     if(!window) {
         if(TTF_Init()!=0){SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Settings",TTF_GetError(),nullptr);return;}
-        const char* fonts[]={"/usr/share/fonts/noto/NotoSans-Regular.ttf","/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/TTF/DejaVuSans.ttf"};
+        const char* fonts[]={"C:/Windows/Fonts/segoeui.ttf","C:/Windows/Fonts/arial.ttf","/usr/share/fonts/noto/NotoSans-Regular.ttf","/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/TTF/DejaVuSans.ttf"};
         for(auto path:fonts)if((font=TTF_OpenFont(path,16)))break;
         if(!font){SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"Settings","Install Noto Sans or DejaVu Sans to display settings.",nullptr);return;}
         window=SDL_CreateWindow("Mario Party 2 Settings",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,670,900,SDL_WINDOW_ALLOW_HIGHDPI);

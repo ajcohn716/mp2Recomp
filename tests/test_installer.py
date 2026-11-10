@@ -59,14 +59,12 @@ class InstallerTests(unittest.TestCase):
     def test_cli_validation(self):
         self.assertEqual(install.main(['--rom',str(self.rom),'--validate-rom']),0)
     def test_gui_drop_local_uri(self):
-        try:from tools.installer_gui import Window
-        except ImportError:self.skipTest('GTK3 bindings not available')
-        values=[];finished=[]
-        fake=SimpleNamespace(running=False,rom=SimpleNamespace(set_text=values.append),status=SimpleNamespace(set_text=values.append))
-        context=SimpleNamespace(finish=lambda *args:finished.append(args))
-        Window.dropped(fake,None,context,0,0,SimpleNamespace(get_uris=lambda:[self.rom.as_uri()]),0,0)
-        self.assertEqual(values[-1],str(self.rom));self.assertTrue(finished[-1][0])
-        Window.dropped(fake,None,context,0,0,SimpleNamespace(get_uris=lambda:['https://example.invalid/rom']),0,0)
-        self.assertFalse(finished[-1][0])
+        try:
+            from tools.installer_gui import local_drop_path
+            from PySide6.QtCore import QUrl
+        except ImportError:self.skipTest('PySide6 not available')
+        self.assertEqual(local_drop_path([QUrl.fromLocalFile(str(self.rom))]),str(self.rom))
+        self.assertIsNone(local_drop_path([QUrl('https://example.invalid/rom')]))
+        self.assertIsNone(local_drop_path([]))
 
 if __name__=='__main__':unittest.main()

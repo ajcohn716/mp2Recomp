@@ -1,7 +1,7 @@
 // Hudson's cooperative processes retain entire guest and host stacks across
 // sleeps. POSIX ucontext fibers provide that behavior without jumping back into
 // C stack frames which have already returned.
-#include <ucontext.h>
+#include "fiber.hpp"
 #include <array>
 #include <cstdio>
 #include <memory>
@@ -13,15 +13,15 @@
 namespace {
 constexpr uint32_t current_addr = 0x800EB8F0, top_addr = 0x800EB8EC;
 struct Fiber {
-    ucontext_t native{};
+    mp2::Fiber native;
+    explicit Fiber(void (*entry)()):native(entry) {}
     recomp_context ctx{};
-    std::unique_ptr<uint8_t[]> stack = std::make_unique<uint8_t[]>(1024 * 1024);
     uint8_t* rdram{};
     uint32_t process{};
     bool dead{};
 };
 thread_local std::unordered_map<uint32_t, std::unique_ptr<Fiber>> fibers;
-thread_local ucontext_t scheduler;
+thread_local mp2::Scheduler scheduler;
 thread_local Fiber* active;
 
 void fiber_entry() {
@@ -34,7 +34,7 @@ void fiber_entry() {
     HuPrcEnd(rdram, &f.ctx);
     std::abort();
 }
-void yield() { swapcontext(&active->native, &scheduler); }
+void yield() { scheduler.yield(active->native); }
 }
 
 extern "C" void HuPrcSleep(uint8_t* rdram, recomp_context* ctx) {
@@ -88,18 +88,13 @@ extern "C" void HuPrcCall(uint8_t* rdram, recomp_context* ctx) {
             }
             auto& slot = fibers[p];
             if (!slot) {
-                slot = std::make_unique<Fiber>();
+                slot = std::make_unique<Fiber>(fiber_entry);
                 auto& f = *slot;
                 f.ctx = *ctx; f.rdram = rdram; f.process = p;
-                getcontext(&f.native);
-                f.native.uc_stack.ss_sp = f.stack.get();
-                f.native.uc_stack.ss_size = 1024 * 1024;
-                f.native.uc_link = &scheduler;
-                makecontext(&f.native, fiber_entry, 0);
                 fprintf(stderr, "[MP2] process %08x entry %08x\n", p, uint32_t(MEM_W(0x30, p)));
             }
             active = slot.get();
-            swapcontext(&scheduler, &active->native);
+            scheduler.resume(active->native);
             active = nullptr;
             if (slot->dead) {
                 uint32_t heap = MEM_W(0x18, p);

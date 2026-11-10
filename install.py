@@ -2,7 +2,10 @@
 """Linux source installer. Game code is generated only on the player's machine."""
 import argparse
 import contextlib
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import hashlib
 import json
 import os
@@ -69,6 +72,13 @@ def system_problems():
         problems.append('Install the Noto Sans or DejaVu Sans system font for game settings.')
     return problems
 
+def lock_file(file):
+    if os.name=='nt':
+        import msvcrt
+        file.seek(0);file.write('0');file.flush();file.seek(0)
+        msvcrt.locking(file.fileno(),msvcrt.LK_NBLCK,1)
+    else:fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
+
 class Installer:
     def __init__(self, status=print, log=print):
         self.status, self.log = status, log
@@ -108,7 +118,7 @@ class Installer:
         self.check_cancelled()
         if result: raise InstallError(f'Command failed (exit {result}). See the installation log.')
 
-    def install(self, rom, prefix, build_dir=None, jobs=4, desktop=True):
+    def install(self, rom, prefix, build_dir=None, jobs=4, desktop=True, dependency_pack=None, sdk_dir=None):
         self.status('Validating ROM')
         data = validate_rom(rom)
         self.check_cancelled()
@@ -127,9 +137,9 @@ class Installer:
         build_dir.mkdir(parents=True,exist_ok=True)
         with (prefix/'.install.lock').open('a') as lock, (build_dir/'.build.lock').open('a') as build_lock:
             try:
-                fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                fcntl.flock(build_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-            except BlockingIOError: raise InstallError('Another installation is using this install or build directory.')
+                lock_file(lock)
+                lock_file(build_lock)
+            except OSError: raise InstallError('Another installation is using this install or build directory.')
             source = build_dir/'source'
             source.mkdir(exist_ok=True)
             for name in source_files():
@@ -187,6 +197,9 @@ def main(argv=None):
     parser.add_argument('--jobs',type=int,default=min(4,os.cpu_count() or 1),help='Parallel compiler jobs (default: %(default)s)')
     parser.add_argument('--launch',action='store_true',help='Launch the installed game when finished')
     parser.add_argument('--no-desktop',action='store_true',help='Do not create a desktop-menu entry')
+    parser.add_argument('--dependency-pack',type=Path,help='Offline dependency archive')
+    parser.add_argument('--sdk-dir',type=Path,help='Already unpacked dependency pack')
+    parser.add_argument('--gui-smoke-test',action='store_true',help=argparse.SUPPRESS)
     parser.add_argument('--gui',action='store_true',help='Open the GUI, optionally prefilled with --rom')
     parser.add_argument('--check-system',action='store_true',help='Check build requirements without installing')
     parser.add_argument('--validate-rom',action='store_true',help='Validate --rom without installing')
@@ -198,12 +211,12 @@ def main(argv=None):
         if not args.rom: parser.error('--validate-rom requires --rom')
         try:validate_rom(args.rom);print('Valid Mario Party 2 USA ROM.');return 0
         except (OSError,InstallError) as exc:print(str(exc),file=sys.stderr);return 1
-    if args.gui or not args.rom:
+    if args.gui or args.gui_smoke_test or not args.rom:
         try:
             from tools.installer_gui import run_gui
             return run_gui(args)
         except ImportError as exc:
-            print('GUI requires Python GObject bindings and GTK3. CLI is available with --rom. '+str(exc),file=sys.stderr);return 1
+            print('GUI requires PySide6. Use a packaged installer or install tools/installer-requirements.txt. CLI is available with --rom. '+str(exc),file=sys.stderr);return 1
     installer=Installer()
     try:
         launcher=installer.install(args.rom,args.prefix,args.build_dir,args.jobs,not args.no_desktop)

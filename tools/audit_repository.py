@@ -8,6 +8,13 @@ import sys
 ALLOWED = {
     ".gitignore",
     "install.py",
+    ".github/workflows/build.yml",
+    "src/fiber.hpp",
+    "src/self_test.cpp",
+    "tests/portability_stubs.cpp",
+    "tests/fixture_funcs.h",
+    "tests/fixture_overlays.inl",
+    "tools/installer-requirements.txt",
     "tools/installer_gui.py",
     "tools/package_installer.py",
     "tests/test_installer.py",

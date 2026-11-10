@@ -11,9 +11,13 @@ void check_interrupts() {}
 class MP2Renderer final : public ultramodern::renderer::RendererContext {
     std::unique_ptr<RT64::Application> app;
 public:
-    MP2Renderer(uint8_t* rdram, SDL_Window* window) {
+    MP2Renderer(uint8_t* rdram, ultramodern::renderer::WindowHandle window) {
         RT64::Application::Core core{};
+#ifdef _WIN32
+        core.window = window.window;
+#else
         core.window = window;
+#endif
         core.HEADER = header;
         core.RDRAM = rdram;
         core.DMEM = dmem_gfx;
@@ -40,7 +44,13 @@ public:
         app->userConfig.resolution = RT64::UserConfiguration::Resolution::Original;
         app->userConfig.aspectRatio = RT64::UserConfiguration::AspectRatio::Original;
         app->userConfig.refreshRate = RT64::UserConfiguration::RefreshRate::Original;
-        auto result = app->setup(0);
+        auto result = app->setup(
+#ifdef _WIN32
+            window.thread_id
+#else
+            0
+#endif
+        );
         setup_result = static_cast<ultramodern::renderer::SetupResult>(result);
         chosen_api = ultramodern::renderer::GraphicsApi::Vulkan;
         fprintf(stderr, "[MP2] RT64 setup result: %d\n", int(result));
@@ -63,6 +73,6 @@ public:
     float get_resolution_scale() const override { return 1.0f; }
 };
 }
-std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_renderer(uint8_t* rdram, SDL_Window* window, bool) {
+std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_renderer(uint8_t* rdram, ultramodern::renderer::WindowHandle window, bool) {
     return std::make_unique<MP2Renderer>(rdram, window);
 }

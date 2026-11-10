@@ -4,11 +4,11 @@
 #include "ultramodern/ultra64.h"
 
 void mp2_overlay_dma(uint32_t, int32_t, uint32_t);
-extern "C" void __real_osEPiStartDma_recomp(uint8_t*, recomp_context*);
-extern "C" void __wrap_osEPiStartDma_recomp(uint8_t* rdram, recomp_context* ctx) {
+extern "C" void mp2_original_osEPiStartDma_recomp(uint8_t*, recomp_context*);
+extern "C" void osEPiStartDma_recomp(uint8_t* rdram, recomp_context* ctx) {
     auto* mb = TO_PTR(OSIoMesg, ctx->r5);
     if (ctx->r6 == 0) mp2_overlay_dma(mb->devAddr, mb->dramAddr, mb->size);
-    __real_osEPiStartDma_recomp(rdram, ctx);
+    mp2_original_osEPiStartDma_recomp(rdram, ctx);
 }
 
 // Unused 64DD SDK paths share translation units with the normal game. Keep

@@ -1,4 +1,7 @@
 #include <SDL.h>
+#ifdef _WIN32
+#include <SDL_syswm.h>
+#endif
 #include "settings.hpp"
 #include <atomic>
 #include <chrono>
@@ -12,7 +15,7 @@
 void register_mp2_overlays();
 void mp2_entry(uint8_t*, recomp_context*);
 void mp2_init(uint8_t*, recomp_context*);
-std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_renderer(uint8_t*, SDL_Window*, bool);
+std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_renderer(uint8_t*, ultramodern::renderer::WindowHandle, bool);
 extern RspUcodeFunc aspMain;
 
 namespace {
@@ -84,6 +87,9 @@ RspUcodeFunc* get_ucode(const OSTask* task) {
 }
 
 int main(int argc, char** argv) {
+    for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--self-test") {
+        extern int mp2_self_test();return mp2_self_test();
+    }
     bool open_settings = false;
     std::filesystem::path rom = "Mario Party 2 (USA).z64";
     for (int i = 1; i < argc; ++i) {
@@ -92,10 +98,15 @@ int main(int argc, char** argv) {
         else if (std::string_view(argv[i]) == "--frames" && i+1 < argc) quit_after = std::stoul(argv[++i]);
         else if (std::string_view(argv[i]) == "--auto-start" && i+1 < argc) auto_start_at = std::stoul(argv[++i]);
     }
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError()); return 1;
     }
-    window = SDL_CreateWindow("Mario Party 2 — Native Recompilation POC", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("Mario Party 2 — Native Recompilation POC", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 720, SDL_WINDOW_RESIZABLE
+#ifndef _WIN32
+        | SDL_WINDOW_VULKAN
+#endif
+    );
     if (!window) { fprintf(stderr, "%s\n", SDL_GetError()); return 1; }
     auto config_dir = std::filesystem::absolute("userdata");
     std::filesystem::create_directories(config_dir);
@@ -121,7 +132,13 @@ int main(int argc, char** argv) {
     }
     recomp::Configuration config{};
     config.project_version = {0, 1, 0, "poc"};
+#ifdef _WIN32
+    SDL_SysWMinfo wm{};SDL_VERSION(&wm.version);
+    if (!SDL_GetWindowWMInfo(window,&wm)) { fprintf(stderr,"%s\n",SDL_GetError());return 1; }
+    config.window_handle = {wm.info.win.window, GetCurrentThreadId()};
+#else
     config.window_handle = window;
+#endif
     config.rsp_callbacks.get_rsp_microcode = get_ucode;
     config.renderer_callbacks.create_render_context = create_mp2_renderer;
     config.audio_callbacks = {queue_audio, audio_remaining, set_frequency};

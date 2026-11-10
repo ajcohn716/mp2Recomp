@@ -1,5 +1,5 @@
 #include "librecomp/overlays.hpp"
-#include "../RecompiledFuncs/recomp_overlays.inl"
+#include "recomp_overlays.inl"
 #include "guest_memory.hpp"
 
 extern "C" {
