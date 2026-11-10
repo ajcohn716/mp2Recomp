@@ -15,6 +15,7 @@ RECIPE_FILES = (
     'src/netplay_steam.cpp', 'src/netplay_transport.hpp',
     'src/steam_helper_main.cpp', 'src/steam_helper_protocol.hpp',
     'src/netplay_steam_proxy.cpp', 'src/steam_helper_process.hpp',
+    'src/netplay_steam_social.hpp',
 )
 
 

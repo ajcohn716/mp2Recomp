@@ -54,7 +54,7 @@ def pack_helper(source, bundle, platform):
     names = bundle_names(platform)
     if {p.name for p in bundle.iterdir()} != names:
         raise RuntimeError('Steam helper bundle has missing or unreviewed files')
-    metadata = {'format': 1, 'protocol': 1, 'platform': platform,
+    metadata = {'format': 1, 'protocol': 2, 'platform': platform,
                 'sdk_version': SDK_VERSION, 'recipe': helper_recipe(source),
                 'files': {name: sha256(bundle / name) for name in sorted(names)}}
     (bundle / 'steam.json').write_text(json.dumps(metadata, indent=2) + '\n')
@@ -65,7 +65,7 @@ def validate_helper(bundle, platform, source=None):
     bundle = Path(bundle).resolve()
     metadata = json.loads((bundle / 'steam.json').read_text())
     names = bundle_names(platform)
-    if (metadata.get('format') != 1 or metadata.get('protocol') != 1 or
+    if (metadata.get('format') != 1 or metadata.get('protocol') != 2 or
             metadata.get('platform') != platform or set(metadata.get('files', {})) != names):
         raise RuntimeError('Incompatible Steam helper bundle')
     if {p.name for p in bundle.iterdir()} != names | {'steam.json'}:

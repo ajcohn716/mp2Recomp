@@ -45,6 +45,27 @@ class PrebuiltRuntimeTests(unittest.TestCase):
                          set(runtime_targets(self.source)))
         self.assertEqual({p.name for p in moved.iterdir()}, {'runtime.json', 'libraries'})
 
+    def test_social_header_invalidates_cached_sdk(self):
+        pack_runtime(self.source, self.build, self.runtime)
+        with (self.source / 'src/netplay_steam_social.hpp').open('a') as stream:
+            stream.write('\n// Changed helper client interface\n')
+        with self.assertRaisesRegex(RuntimeError, 'does not match'):
+            validate_runtime(self.source, self.runtime)
+
+    def test_helper_protocol_1_is_rejected(self):
+        from tools.steam_sdk import bundle_names, pack_helper, validate_helper
+        bundle = self.root / 'steam'
+        bundle.mkdir()
+        for name in bundle_names('linux-x86_64'):
+            (bundle / name).write_bytes(b'synthetic helper file')
+        metadata = pack_helper(self.source, bundle, 'linux-x86_64')
+        self.assertEqual(metadata['protocol'], 2)
+        validate_helper(bundle, 'linux-x86_64', self.source)
+        metadata['protocol'] = 1
+        (bundle / 'steam.json').write_text(json.dumps(metadata))
+        with self.assertRaisesRegex(RuntimeError, 'Incompatible Steam helper'):
+            validate_helper(bundle, 'linux-x86_64', self.source)
+
     def test_game_target_in_manifest_is_rejected(self):
         with (self.build / 'runtime-libraries.txt').open('a') as stream:
             stream.write('mp2_code|' + str(self.build / 'libmp2_code.a') + '\n')

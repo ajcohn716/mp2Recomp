@@ -94,20 +94,24 @@ jobs:
         name: Build transport tests
         run: |
           cmake -S . -B build/netplay -G Ninja -DMP2_NETPLAY_ONLY=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-          cmake --build build/netplay --target netplay_test -j 3
+          cmake --build build/netplay --target netplay_test netplay_steam_social_test -j 3
       - if: runner.os == 'Windows'
         name: Build transport tests
         shell: msys2 {0}
         run: |
           cmake -S . -B build/netplay -G Ninja -DMP2_NETPLAY_ONLY=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-          cmake --build build/netplay --target netplay_test -j 3
+          cmake --build build/netplay --target netplay_test netplay_steam_social_test -j 3
       - if: runner.os == 'Linux'
         name: Test encrypted direct netplay
-        run: ./build/netplay/netplay_test
+        run: |
+          ./build/netplay/netplay_test
+          ./build/netplay/netplay_steam_social_test
       - if: runner.os == 'Windows'
         name: Test encrypted direct netplay
         shell: pwsh
         run: |
           $env:PATH = "$env:RUNNER_TEMP/msys64/clang64/bin;$env:PATH"
           ./build/netplay/netplay_test.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./build/netplay/netplay_steam_social_test.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
