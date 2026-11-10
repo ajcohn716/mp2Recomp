@@ -64,15 +64,13 @@ checksum. You can also select it in the GUI's advanced options or pass it explic
   --dependency-pack "/path/to/mp2recomp-sdk-linux-x86_64.tar.gz"
 ```
 
-The pack includes Python, a compiler, build tools, open-source dependencies, and
-precompiled RT64, N64ModernRuntime, and networking libraries. You do not need to
+The pack includes Python, a compiler, build tools, and open-source dependencies. You do not need to
 install Python, Visual Studio, MSYS2, or development packages separately.
 Your graphics driver must still provide Vulkan support.
 
 Game code and audio microcode are generated and compiled on your computer.
 Installation still takes time: this is a local build, not just file extraction.
-Explicitly supplied older SDKs without precompiled libraries use the full local
-build path. No ROM, generated game code, or game assets are sent to the cloud build.
+No ROM, generated game code, or game assets are sent to the cloud build.
 
 Steam support is a separate source-build option. The installer dependency packs
 do not include the Steamworks SDK; see [multiplayer setup](netplay.md).
@@ -103,13 +101,6 @@ The `Installer release` GitHub Actions workflow builds each platform's installer
 and matching dependency pack. Tagged `v*` builds prepare a draft release for
 verification before publication; manual runs also provide Actions artifacts.
 
-Only explicitly allowlisted open-source dependency archives enter the runtime
-library set. Game and compiled fixture code are excluded. Before packaging, a
-fresh ROM-free consumer build must link the libraries, pass self-tests, and
-compile no dependency objects. The installer checks the runtime recipe, archive
-checksums, and compiler/platform compatibility before using them.
-
 For installer-only changes, workflow dispatch can reuse a verified SDK run via
 `sdk_run_id`. Its dependency pins and toolchain recipe must match; leave the field
-blank to rebuild both SDKs. The first release with precompiled runtime libraries
-must rebuild both SDKs: older SDK artifacts cannot be reused by the release packager.
+blank to rebuild both SDKs.
