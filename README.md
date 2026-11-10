@@ -45,13 +45,26 @@ Keyboard controls:
 | C up / down / left / right | I / K / J / L |
 | Quit | Escape or close window |
 
+Press **F1** to open the settings window, or launch with `./run.sh --settings`.
+Click a keyboard/controller binding and press its replacement input; Escape
+cancels a binding capture. Select a connected SDL-compatible controller, adjust
+its left-stick deadzone, or choose keyboard-only input. Devices can be plugged
+in while the game is running. Arrow keys always control the analog stick.
+
+Master volume, left/right channel levels, and mute are applied to the game audio.
+Settings save automatically in `userdata/settings.cfg`; Reset defaults restores
+bindings, volume and deadzone. Escape or Done closes settings. Game input is
+suppressed while settings is open; the game simulation continues. The settings
+window uses the system Noto Sans or DejaVu Sans font (install either package).
+Run `./tools/test_settings.sh` for the headless settings integration check.
+
 Only controller port 1 is connected. Saves and the runtime's ROM copy live in
 `userdata/`; the EEPROM file is `userdata/saves/mp2.us.bin`.
 
 ## Rebuild
 
 This proof of concept targets Linux. It was built with Clang, CMake, Ninja,
-SDL2, GTK3 development libraries, and Vulkan on an AMD RX 7800 XT. The audio
+SDL2, SDL2_ttf, GTK3 development libraries, and Vulkan on an AMD RX 7800 XT. The audio
 microcode implementation requires SSE4.1 on x86-64. Building other platforms
 requires replacing the POSIX fiber implementation and adapting the frontend.
 
@@ -130,8 +143,7 @@ This is a boot/title proof of concept, not a validated full-game port.
 Boards, minigames, multiplayer, long sessions, and audio/graphics fidelity
 have not been comprehensively tested. Some title prompt glyphs appear as
 blocks during local testing and need further renderer investigation.
-There is no controller mapping UI, resizing configuration UI, or mod support
-exposed by this frontend.
+There is no resizing configuration UI or mod support exposed by this frontend.
 
 Two unused low-level SDK functions are stubbed in `mp2.toml`:
 `__LeoBootGame3` (64DD boot) and `func_8009D24C_9DE4C` (an exception/scheduler

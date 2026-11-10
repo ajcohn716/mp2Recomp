@@ -23,6 +23,8 @@ ALLOWED = {
     "src/renderer.cpp",
     "tools/audit_repository.py",
     "tools/bootstrap.py",
+    "tools/test_settings.sh",
+    "tests/settings_test.cpp",
     "tools/generate_symbols.py",
     "tools/regenerate.sh",
 }
