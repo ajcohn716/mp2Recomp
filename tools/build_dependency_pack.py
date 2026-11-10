@@ -54,6 +54,10 @@ def main():
     # Use the original prefix for compilation; compiled tools find their shared
     # libraries through sdk_environment after installation.
     env['PATH']=str(args.toolchain/'bin')+os.pathsep+env.get('PATH','')
+    env['CMAKE_PREFIX_PATH']=str(args.toolchain)
+    env['CONDA_PREFIX']=str(args.toolchain)
+    env['PKG_CONFIG_PATH']=str(args.toolchain/'lib/pkgconfig')
+    if not windows:env['LD_LIBRARY_PATH']=str(args.toolchain/'lib')
     build=ROOT/'build/sdk-tools'
     compiler_flags=[]
     if windows:
@@ -63,7 +67,7 @@ def main():
         flags='--gcc-toolchain='+str(args.toolchain)+' --sysroot='+str(sysroot)
         compiler_flags=['-DCMAKE_C_FLAGS='+flags,'-DCMAKE_CXX_FLAGS='+flags]
     cmake=str(args.toolchain/('bin/cmake'+suffix))
-    subprocess.run([cmake,'-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER=clang','-DCMAKE_CXX_COMPILER=clang++',*compiler_flags],env=env,check=True)
+    subprocess.run([cmake,'-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
     subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'--build',str(build),'--target','N64RecompCLI','RSPRecomp','-j',args.jobs],env=env,check=True)
     (stage/'tools').mkdir(exist_ok=True)
     for tool in ('N64Recomp','RSPRecomp'):shutil.copy2(build/(tool+suffix),stage/'tools'/(tool+suffix))
@@ -72,7 +76,7 @@ def main():
     check=ROOT/'build/sdk-platform-check'
     subprocess.run([cmake,'-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
-        '-DCMAKE_C_COMPILER=clang','-DCMAKE_CXX_COMPILER=clang++',*compiler_flags],env=env,check=True)
+        '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
     subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','-j',args.jobs],env=env,check=True)
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
     for path in stage.rglob('*'):
