@@ -13,11 +13,12 @@ compatibility before letting a player join.
 | --- | --- | --- |
 | Direct TCP on a LAN | Installer or source build; host's LAN address | [Direct room steps](#direct-tcp-rooms); no router forwarding needed |
 | Direct TCP over the internet | Installer or source build; host's public address and TCP port forwarding | [Direct room steps](#direct-tcp-rooms) |
-| Steam | A source build with the separate Steamworks SDK; Steam running for every player | [Steam room steps](#steam-rooms); no port forwarding needed |
+| Steam | Version 0.2.1 installer or a source build with the helper; Steam running for every player | [Steam room steps](#steam-rooms); no port forwarding needed |
 
-**Installer dependency packs do not include Steamworks.** If Steam is unavailable
-in your build, choose **Direct TCP** or follow [Build with Steamworks](#build-with-steamworks).
-Steam is the default transport in Steam-enabled builds.
+**Version 0.2.1 installers include Steam support.** Players need Steam installed,
+running and signed in; they do not need the Steamworks SDK. Source developers can
+[build the standalone helper](#build-with-steamworks) separately. Steam is the
+default transport; Direct TCP remains available without Steam.
 
 Creating or joining a room restarts the game into a lobby. Finish or save your
 offline game first; it cannot be continued online. Everyone must join before
@@ -37,11 +38,10 @@ chooses human/CPU players through its own menus.
 
 ## Steam rooms
 
-Use a Steam-enabled build (see below). Start Steam and sign in before creating
+Install version 0.2.1 or use a source build with the helper. Start Steam and sign in before creating
 or joining a room. Each player needs a separate Steam account and computer.
-Steamworks uses **Spacewar App ID 480 permanently**, including standalone
-launches. This project does not require a Steam store launch or a different
-production App ID. There is no automatic App ID migration or replacement step.
+This alpha uses the **Spacewar test App ID 480**, including standalone launches.
+Steam may display the session as Spacewar.
 
 1. Open **F1 → Netplay**, or launch `./run.sh --netplay` (installed Linux:
    `./play --netplay`; Windows: `mp2recomp.exe --netplay`).
@@ -140,7 +140,7 @@ are never used as save-directory names.
 
 | Symptom | What to check |
 | --- | --- |
-| Steam is unavailable | Use a Steam-enabled source build, or select Direct TCP. Starting Steam alone does not enable support in an SDK-free build. |
+| Steam helper unavailable | Reinstall version 0.2.1 with its matching dependency pack, keep the helper/runtime files together, or select Direct TCP. |
 | Steam initialization fails | Start Steam, sign in, and run it as the same OS user as the game. Each remote player needs their own account and computer. |
 | Direct TCP works on LAN but not over the internet | Check the public address, host firewall, and TCP forwarding. External/internal ports must match. Carrier-grade NAT can prevent hosting. |
 | Public-IP detection fails or shows a VPN address | Enter the reachable host address manually; detection does not configure your router. |
@@ -153,9 +153,10 @@ are never used as save-directory names.
 First complete the [source-build prerequisites and code generation](building.md).
 Obtain the Steamworks SDK (validated with version 1.65) from Valve and extract
 it outside tracked source, for example `build/steamworks-sdk`. It must contain
-`public/steam/steam_api.h` and `redistributable_bin`. No SDK headers or binaries are committed or fetched by
-`tools/bootstrap.py`. The SDK is an explicit local build input, separate from
-the project's open-source dependency pack.
+`public/steam/steam_api.h` and `redistributable_bin`. No SDK headers or Valve
+binaries are committed or fetched by `tools/bootstrap.py`. The SDK is an explicit
+development input for compiling the helper; release installers already include
+the compiled helper and permitted runtime files.
 
 ```sh
 cmake -S . -B build/native -G Ninja \
@@ -165,20 +166,30 @@ cmake -S . -B build/native -G Ninja \
 cmake --build build/native --target mp2recomp -j 6
 ```
 
-The build integration targets Linux and Windows x86-64; Windows Steam builds
-have not been verified locally. CMake copies
-`libsteam_api.so` or `steam_api64.dll`, plus `steam_appid.txt` containing **480**,
-next to the executable. Keep these with the executable when moving a build.
-Initialization also sets `SteamAppId` and `SteamGameId` to 480, so standalone
-launches from another working directory use the same identity. Steam must run
-under the same OS user. Initialization happens only when entering a Steam room;
-offline and Direct TCP play do not initialize Steam.
+CMake builds `mp2recomp-steam-helper` as an independent MIT executable and copies
+it and `libsteam_api.so` or `steam_api64.dll` beside the game. Only the helper
+links Valve's runtime and includes SDK headers. The game talks to it through
+process pipes; no emulator or ROM-derived code is linked into the helper.
+Keep the helper and runtime files with the executable when moving a build.
+Initialization sets `SteamAppId` and `SteamGameId` to 480. Steam must run under
+the same OS user. The helper starts only when entering a Steam room; offline and
+Direct TCP play do not require Steam.
 
-Without `MP2_STEAMWORKS_SDK`, builds remain usable offline and over Direct TCP;
-attempting a Steam room reports how to enable it. Existing installer SDK recipes
-do not include Valve's SDK; use an explicitly Steam-enabled source build for
-Steam rooms. The Steam SDK/runtime retain Valve's terms and are not covered by
-this repository's source license.
+To build only the helper, without a ROM or emulator dependencies:
+
+```sh
+cmake -S steam-helper -B build/steam-helper -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ \
+  -DMP2_STEAMWORKS_SDK="$PWD/build/steamworks-sdk"
+cmake --build build/steam-helper -j 4
+./build/steam-helper/mp2recomp-steam-helper --self-test
+```
+
+A source build can instead use an existing precompiled bundle with
+`-DMP2_STEAM_HELPER_DIR=/path/to/sdk/steam`. Without either build option, Steam
+also works if the matching helper/runtime files are already beside the game.
+Otherwise the game reports the missing helper and Direct TCP remains usable.
+The Steam SDK/runtime retain Valve's terms. See [helper protocol and licensing](steam-helper.md).
 
 ## Tests
 

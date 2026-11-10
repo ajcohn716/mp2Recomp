@@ -22,10 +22,21 @@ and their recursive submodules for development builds.
 | Splat | MIT | https://github.com/ethteck/splat |
 | spimdisasm | MIT | https://github.com/Decompollaborate/spimdisasm |
 
-Optional Steam-enabled source builds also link Valve's Steamworks runtime. The
-Steamworks SDK is supplied separately and retains Valve's terms; it is not part
-of the open-source dependency pack or this repository. The integration uses
-Spacewar App ID 480 for standalone builds. See https://partner.steamgames.com/.
+Version 0.2.1 installers include a standalone `mp2recomp-steam-helper` process and
+Valve's `steam_api64.dll` (Windows) or `libsteam_api.so` (Linux). The helper's
+authored source and shared generic transport/protocol headers are MIT-licensed;
+see LICENSE-STEAM-HELPER for the exact scope. It links only Valve's runtime and
+standard system/compiler libraries, not the GPL game or N64ModernRuntime.
+The game uses process pipes to communicate with this independent service.
+
+Valve's proprietary runtime retains Valve's terms and is distributed as an SDK
+Redistributable with the helper under section 1.1(b) of the Steamworks SDK Access
+Agreement: https://partner.steamgames.com/documentation/sdk_access_agreement/.
+The full Steamworks SDK and headers are private build inputs and are not part of
+public packs or tracked source. See steam-helper/STEAMWORKS-NOTICE.txt, also
+installed beside the helper. This alpha uses the Spacewar test App ID 480.
+No Valve affiliation or endorsement is implied. Third-party GPL licenses are
+unchanged; this project does not grant exceptions on upstream authors' behalf.
 
 The installer SDK contains source trees for N64Recomp, N64ModernRuntime, RT64,
 DirectX-Headers and libdatachannel, including their bundled license files.

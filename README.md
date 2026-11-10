@@ -1,7 +1,7 @@
 # Mario Party 2 Recompiled
 
 [Downloads](https://github.com/ajcohn716/mp2Recomp/releases) ·
-[Release notes](docs/releases/v0.2.md) · [GPLv3 or later](LICENSE)
+[Release notes](docs/releases/v0.2.1.md) · [GPLv3 or later](LICENSE)
 
 A native PC recompilation of **Mario Party 2** for Linux and Windows x86-64.
 The US game boots through the logos and animated opening to the title screen.
@@ -97,12 +97,12 @@ settings and progress.
 ## Play with friends (experimental)
 
 Two to four players can share a room, each using their own supported ROM and a
-matching build. **Installer builds support Direct TCP. Steam rooms require a
-source build with the separately supplied Steamworks SDK.**
+matching build. **Version 0.2.1 installers include Steam and Direct TCP support.**
+Players do not need the Steamworks SDK.
 
 Open **F1 → Netplay**. For LAN play, choose **Direct TCP** and use the host's LAN
 address. Internet Direct TCP hosts also need port forwarding. Steam-enabled
-builds use **Spacewar App ID 480** and require each player to run Steam, signed in
+builds use the **Spacewar test App ID 480** and require each player to run Steam, signed in
 on their own account and computer.
 
 Creating or joining a room restarts the game into a lobby. The host shares the
@@ -145,10 +145,15 @@ The generated game code and assets are not included as redistributable source.
 
 Copyright (C) 2026 Andrew Cohn and contributors.
 
-The authored integration code, installer and build scripts are free software:
+The game integration, installer and build scripts are free software:
 you can redistribute them and/or modify them under the GNU General Public License
 as published by the Free Software Foundation, either version 3 of the License,
 or (at your option) any later version (`GPL-3.0-or-later`).
+
+The standalone Steam helper and its shared transport/protocol headers are
+MIT-licensed; see [LICENSE-STEAM-HELPER](LICENSE-STEAM-HELPER) for the exact file
+scope. It runs as a separate process; the GPL game does not link Valve's runtime.
+Valve's bundled runtime files retain Valve's terms.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A

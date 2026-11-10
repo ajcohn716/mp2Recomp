@@ -76,7 +76,8 @@ checksum. You can also select it in the GUI's advanced options or pass it explic
   --dependency-pack "/path/to/mp2recomp-sdk-linux-x86_64.tar.gz"
 ```
 
-The pack includes Python, a compiler, build tools, and open-source dependencies. You do not need to
+The pack includes Python, a compiler, build tools, open-source dependencies, and
+a precompiled Steam helper with its runtime library. You do not need to
 install Python, Visual Studio, MSYS2, or development packages separately.
 Your graphics driver must still provide Vulkan support.
 
@@ -84,8 +85,11 @@ Game code and audio microcode are generated and compiled on your computer.
 Installation still takes time: this is a local build, not just file extraction.
 No ROM, generated game code, or game assets are sent to the cloud build.
 
-Steam support is a separate source-build option. The installer dependency packs
-do not include the Steamworks SDK; see [multiplayer setup](netplay.md).
+Version 0.2.1 includes Steam support automatically. No Steamworks SDK download
+or development headers are needed by players. Install Steam separately, start it,
+and sign in before using **F1 → Netplay → Steam**. Each player needs their own
+Steam account and computer. Offline and Direct TCP play work without Steam.
+See [multiplayer setup](netplay.md).
 
 ## If something goes wrong
 
@@ -95,6 +99,8 @@ do not include the Steamworks SDK; see [multiplayer setup](netplay.md).
 | Dependency pack missing or rejected | Use the matching SDK from the same release, keep it compressed beside the installer, or select it in advanced options. |
 | Installation fails during compilation | Keep the installer log, retry with fewer compiler jobs, and reuse the same build/cache directory. |
 | Game will not open a graphics window | Check that your graphics driver supports Vulkan. On Linux, the video self-test below can help identify the display backend. |
+| Steam helper missing or damaged | Reinstall using the complete v0.2.1 archive and matching dependency pack. Keep the installed helper and its runtime files together. |
+| Steam initialization fails | Start Steam and sign in under the same OS user as the game, or choose Direct TCP. |
 | Need logs after a crash | Look in `userdata/debug/` inside the game directory; see [debugging](debugging.md). Logs can contain private room codes. |
 
 The Linux SDK uses pinned SDL 2.30.10 with Wayland and X11 support, including
@@ -129,3 +135,14 @@ before using them.
 A compiler is still bundled because installation generates, compiles, and links
 game code locally from the user's ROM. Explicitly supplied older SDKs without
 precompiled libraries retain the full local build path.
+
+
+Version 0.2.1 also builds the standalone MIT Steam helper from private Steamworks
+SDK 1.65 inputs. The workflow reads checksum-pinned input from the repository's
+`MP2_STEAMWORKS_SDK_00` through `_25` Actions secrets. Headers are used only on
+build runners. Public packs contain the helper, the platform runtime library,
+metadata and license notices, never the full Steamworks SDK or headers. SDK
+reuse requires matching runtime and Steam-helper recipes; v0.2 SDKs cannot be
+used for v0.2.1. `tools/build_dependency_pack.py` requires `--steamworks-sdk PATH`
+when building release packs locally. The GPL game communicates with the helper
+over process pipes and does not link Valve's runtime.
