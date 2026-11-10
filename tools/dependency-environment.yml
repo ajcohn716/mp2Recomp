@@ -1,0 +1,22 @@
+name: mp2-sdk
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - clang=21
+  - clangxx=21
+  - lld=21
+  - gxx_linux-64=14
+  - sysroot_linux-64=2.28
+  - cmake=4
+  - ninja
+  - pkg-config
+  - sdl2=2
+  - sdl2_ttf=2
+  - gtk3
+  - conda-pack=0.8
+  - pip:
+      - splat64[mips]==0.50.1
+      - spimdisasm==1.42.4
+      - PyYAML==6.0.3

@@ -9,6 +9,8 @@ ALLOWED = {
     ".gitignore",
     "install.py",
     ".github/workflows/build.yml",
+    ".github/workflows/release.yml",
+    "tools/dependency-environment.yml",
     "src/fiber.hpp",
     "src/self_test.cpp",
     "tests/portability_stubs.cpp",

@@ -1,40 +1,44 @@
 #!/usr/bin/env python3
-"""Package only reviewed authored source into a self-extracting Linux installer."""
-import base64
-import io
+"""Freeze the Qt installer, Python runtime and reviewed source for this platform."""
+import argparse
+import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from install import source_files
+from tools.dependency_pack import platform_key,sha256
 
 def main():
+    p=argparse.ArgumentParser();p.add_argument('--metadata',type=Path,required=True)
+    p.add_argument('--tag',required=True);p.add_argument('--repository',default='ajcohn716/mp2Recomp');args=p.parse_args()
     subprocess.run([sys.executable,str(ROOT/'tools/audit_repository.py')],cwd=ROOT,check=True)
-    stream=io.BytesIO()
-    with tarfile.open(fileobj=stream,mode='w:gz') as archive:
-        for name in source_files():
-            path=ROOT/name
-            if path.is_symlink() or not path.is_file():raise SystemExit('Not a regular source file: '+name)
-            # Package the exact staged blobs that passed the publication audit.
-            data=subprocess.check_output(['git','show',':'+name],cwd=ROOT)
-            info=tarfile.TarInfo(name);info.size=len(data);info.mode=0o755 if path.stat().st_mode&0o111 else 0o644
-            archive.addfile(info,io.BytesIO(data))
-    output=ROOT/'dist/mp2recomp-installer.run';output.parent.mkdir(exist_ok=True)
-    header='''#!/bin/sh
-# Source-only installer. Requires Python 3; GUI additionally requires GTK3/PyGObject.
-exec python3 - "$0" "$@" <<'MP2_PYTHON'
-import base64, io, pathlib, subprocess, sys, tarfile, tempfile
-payload = pathlib.Path(sys.argv[1]).read_bytes().partition(b"\\n__MP2_PAYLOAD__\\n")[2]
-with tempfile.TemporaryDirectory(prefix="mp2recomp-installer-") as directory:
-    with tarfile.open(fileobj=io.BytesIO(base64.b64decode(payload)), mode="r:gz") as archive:
-        archive.extractall(directory, filter="data")
-    result = subprocess.call([sys.executable, str(pathlib.Path(directory)/"install.py"), *sys.argv[2:]])
-sys.exit(result)
-MP2_PYTHON
-__MP2_PAYLOAD__
-'''
-    output.write_bytes(header.encode()+base64.encodebytes(stream.getvalue()));output.chmod(0o755)
-    print(output)
+    source=ROOT/'build/installer-source';source.mkdir(parents=True,exist_ok=True)
+    for name in source_files():
+        data=subprocess.check_output(['git','show',':'+name],cwd=ROOT)
+        target=source/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+    packs={}
+    for item in args.metadata.glob('mp2recomp-sdk-*.json'):
+        entry=json.loads(item.read_text());entry['url']=f'https://github.com/{args.repository}/releases/download/{args.tag}/{entry["filename"]}'
+        packs[entry.pop('platform')]=entry
+    if platform_key() not in packs:raise SystemExit('Missing SDK metadata for '+platform_key())
+    (source/'release-catalog.json').write_text(json.dumps({'format':1,'packs':packs},indent=2))
+    dist=ROOT/'dist/installer';dist.mkdir(parents=True,exist_ok=True)
+    subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--name','mp2recomp-installer',
+        '--specpath',str(ROOT/'build/installer-spec'),'--workpath',str(ROOT/'build/installer-freeze'),
+        '--distpath',str(dist),'--add-data',str(source)+os.pathsep+'source',
+        '--hidden-import','tools.installer_gui',str(ROOT/'install.py')],cwd=ROOT,check=True)
+    folder=dist/'mp2recomp-installer'
+    name='mp2recomp-installer-'+platform_key()
+    if os.name=='nt':archive=Path(shutil.make_archive(str(ROOT/'dist'/name),'zip',folder))
+    else:
+        archive=ROOT/'dist'/(name+'.tar.gz')
+        with tarfile.open(archive,'w:gz') as tar:
+            for item in sorted(folder.iterdir()):tar.add(item,arcname=item.name)
+    archive.with_name(archive.name+'.sha256').write_text(sha256(archive)+'  '+archive.name+'\n')
+    print(archive)
 if __name__=='__main__':main()

@@ -90,6 +90,9 @@ int main(int argc, char** argv) {
     for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--self-test") {
         extern int mp2_self_test();return mp2_self_test();
     }
+#ifdef _WIN32
+    if(char* base=SDL_GetBasePath()) { std::filesystem::current_path(std::filesystem::u8path(base));SDL_free(base); }
+#endif
     bool open_settings = false;
     std::filesystem::path rom = "Mario Party 2 (USA).z64";
     for (int i = 1; i < argc; ++i) {

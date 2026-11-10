@@ -18,7 +18,7 @@ def main():
     args.output=args.output.resolve();args.output.mkdir(parents=True,exist_ok=True)
     stage=args.output/'sdk-stage';stage.mkdir(exist_ok=True)
     def copytree(source,target):
-        shutil.copytree(source,target,dirs_exist_ok=True,symlinks=True,ignore=shutil.ignore_patterns('.git','.github','build','.venv','__pycache__'))
+        shutil.copytree(source,target,dirs_exist_ok=True,symlinks=True,ignore=shutil.ignore_patterns('.git','.github','.venv','__pycache__'))
     windows=args.platform.startswith('windows')
     # Linux's conda-pack contains relocation records and third-party licenses.
     if windows:
@@ -31,6 +31,7 @@ def main():
         subprocess.run([str(args.python),'-m','conda_pack','-p',str(args.toolchain),'-o',str(packed),'--force'],check=True)
         (stage/'toolchain').mkdir(exist_ok=True)
         with tarfile.open(packed) as archive:archive.extractall(stage/'toolchain',filter='data')
+        packed.unlink()
         python=stage/'toolchain/bin/python'
     sources=stage/'sources';sources.mkdir(exist_ok=True)
     for name in ('N64Recomp','runtime','rt64','directx-headers'):copytree(ROOT/name,sources/name)
@@ -52,10 +53,24 @@ def main():
     # libraries through sdk_environment after installation.
     env['PATH']=str(args.toolchain/'bin')+os.pathsep+env.get('PATH','')
     build=ROOT/'build/sdk-tools'
-    subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER=clang','-DCMAKE_CXX_COMPILER=clang++'],env=env,check=True)
+    compiler_flags=[]
+    if not windows:
+        sysroot=args.toolchain/'x86_64-conda-linux-gnu/sysroot'
+        flags='--gcc-toolchain='+str(args.toolchain)+' --sysroot='+str(sysroot)
+        compiler_flags=['-DCMAKE_C_FLAGS='+flags,'-DCMAKE_CXX_FLAGS='+flags]
+    cmake=str(args.toolchain/('bin/cmake'+suffix))
+    subprocess.run([cmake,'-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER=clang','-DCMAKE_CXX_COMPILER=clang++',*compiler_flags],env=env,check=True)
     subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'--build',str(build),'--target','N64RecompCLI','RSPRecomp','-j',args.jobs],env=env,check=True)
     (stage/'tools').mkdir(exist_ok=True)
     for tool in ('N64Recomp','RSPRecomp'):shutil.copy2(build/(tool+suffix),stage/'tools'/(tool+suffix))
+    # A dependency pack is publishable only after compiling and running the
+    # complete host runtime with synthetic (non-game) link fixtures.
+    check=ROOT/'build/sdk-platform-check'
+    subprocess.run([cmake,'-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
+        '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
+        '-DCMAKE_C_COMPILER=clang','-DCMAKE_CXX_COMPILER=clang++',*compiler_flags],env=env,check=True)
+    subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','-j',args.jobs],env=env,check=True)
+    subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
     for path in stage.rglob('*'):
         if path.is_file() and path.suffix.lower() in ('.z64','.v64','.n64'):raise SystemExit('ROM-like file rejected: '+str(path))
     name='mp2recomp-sdk-'+args.platform

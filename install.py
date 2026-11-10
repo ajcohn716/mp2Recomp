@@ -182,7 +182,7 @@ class Installer:
             self.run(regenerate,source,env)
             self.status('Configuring the native build')
             configure=[cmake,'-S','.', '-B','build/native','-G','Ninja','-DCMAKE_BUILD_TYPE=Release',
-                '-DCMAKE_C_COMPILER='+cc,'-DCMAKE_CXX_COMPILER='+cxx]
+                '-DCMAKE_C_COMPILER='+cc,'-DCMAKE_CXX_COMPILER='+cxx,'-DCMAKE_POLICY_VERSION_MINIMUM=3.5']
             if sdk:
                 configure+=['-DCMAKE_MAKE_PROGRAM='+tool('ninja'),'-DCMAKE_PREFIX_PATH='+str(sdk/'toolchain'),
                     '-DSDL2_DIR='+str(sdk/'toolchain/lib/cmake/SDL2'),'-DSDL2_ttf_DIR='+str(sdk/'toolchain/lib/cmake/SDL2_ttf')]
