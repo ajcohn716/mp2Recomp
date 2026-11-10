@@ -61,7 +61,7 @@ def system_problems():
     for command in ('git', 'cmake', 'ninja', 'clang', 'clang++', 'pkg-config', 'rg'):
         if not shutil.which(command): problems.append('Missing command: ' + command)
     if os.name!='nt' and shutil.which('pkg-config'):
-        for package in ('sdl2', 'SDL2_ttf', 'gtk+-3.0'):
+        for package in ('sdl2', 'SDL2_ttf', 'gtk+-3.0', 'openssl'):
             if subprocess.run(['pkg-config','--exists',package]).returncode:
                 problems.append('Missing development package: ' + package)
     try:
@@ -185,7 +185,7 @@ class Installer:
                 tool=lambda name:str(sdk/metadata['tools'][name])
                 python=tool('python');cmake=tool('cmake');cc=tool('cc');cxx=tool('cxx')
                 self.status('Preparing bundled source dependencies')
-                for name in ('N64Recomp','runtime','rt64','decomp','directx-headers'):
+                for name in ('N64Recomp','runtime','rt64','decomp','directx-headers','libdatachannel'):
                     self.check_cancelled()
                     shutil.copytree(sdk/'sources'/name,source/name,dirs_exist_ok=True,symlinks=False)
                 if os.name=='nt' and getattr(sys,'frozen',False):

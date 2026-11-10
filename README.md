@@ -1,4 +1,7 @@
-# Mario Party 2: native recompilation proof of concept
+# Mario Party 2 Recompiled v0.1
+
+[Download v0.1](https://github.com/ajcohn716/mp2Recomp/releases/tag/v0.1) ·
+[Release notes](docs/releases/v0.1.md) · [GPLv3 or later](LICENSE)
 
 The US ROM boots through the Nintendo/Hudson logos and the animated opening
 to the **Mario Party 2 title screen**. The game CPU code runs as statically
@@ -49,13 +52,10 @@ mp2recomp-installer --rom "/path/to/game.z64" \
   --dependency-pack "/path/to/mp2recomp-sdk-linux-x86_64.tar.gz"
 ```
 
-**Private repository:** automatic downloads cannot authenticate to private
-release assets. Keep the included SDK archive beside the executable. If it is
-missing, download the matching SDK through GitHub while signed in. Manual
-workflow runs provide Actions artifacts: download your platform's installer
-artifact and extract both its outer artifact ZIP and the installer archive
-inside. The SDK archive beside the executable stays compressed.
-Tagged `v*` builds create a draft release; publishing remains a separate step.
+Releases include Linux and Windows installers built by the `Installer release`
+GitHub Actions workflow. Each installer archive includes its matching offline
+SDK. Tagged `v*` builds prepare a draft release for verification before publication.
+Manual workflow runs also provide downloadable Actions artifacts.
 No ROM, generated game code or game assets are sent to the cloud build.
 For installer-only changes, workflow dispatch can reuse a verified SDK run via
 `sdk_run_id`. Its dependency pins and toolchain
@@ -114,13 +114,27 @@ suppressed while settings is open; the game simulation continues. The settings
 window uses Segoe UI/Arial on Windows and Noto Sans/DejaVu Sans on Linux.
 Run `./tools/test_settings.sh` for the headless settings integration check.
 
-Only controller port 1 is connected. Saves and the runtime's ROM copy live in
+Offline play connects controller port 1. Saves and the runtime's ROM copy live in
 `userdata/`; the EEPROM file is `userdata/saves/mp2.us.bin`.
+
+## Experimental room multiplayer
+
+Launch `./run.sh --netplay` (installed Linux: `./play --netplay`; Windows:
+`mp2recomp.exe --netplay`). The host enters their public IP/DNS name and forwards
+TCP port 7777, creates a room, and copies its connection code. Friends paste the
+code to join, then the host starts. Two to four clients synchronize N64 controller
+inputs over encrypted direct connections. Each player controls one assigned port.
+
+No shared backend, relay, matchmaking or public-IP lookup service is used.
+Connection codes contain the host address and session key, so share them privately.
+See [netplay setup, port forwarding and tests](docs/netplay.md). Session saves
+are isolated from offline saves. This is experimental; complete boards/minigames,
+separate home networks and Linux/Windows cross-play still need validation.
 
 ## Rebuild
 
 Linux boot has been verified with Clang, CMake, Ninja,
-SDL2, SDL2_ttf, GTK3 development libraries, and Vulkan on an AMD RX 7800 XT. The audio
+SDL2, SDL2_ttf, GTK3 and OpenSSL development libraries, and Vulkan on an AMD RX 7800 XT. The audio
 microcode implementation requires SSE4.1 on x86-64. Windows compilation
 is covered by the Windows CI build; actual Windows game boot still needs testing.
 
@@ -236,3 +250,21 @@ rejects binary content, oversized files, symlinks, generated game code markers,
 and ROM-derived assembly/decompiler output. New authored files must be reviewed
 and added to that allowlist before they can pass. It does not replace source
 review for provenance.
+
+## License
+
+Copyright (C) 2026 Andrew Cohn and contributors.
+
+The authored integration code, installer and build scripts are free software:
+you can redistribute them and/or modify them under the GNU General Public License
+as published by the Free Software Foundation, either version 3 of the License,
+or (at your option) any later version (`GPL-3.0-or-later`).
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full terms.
+
+Third-party components retain their own licenses and copyright notices; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This license does not grant
+rights to Nintendo/Hudson game code, ROMs, assets, names or trademarks. This is
+an independent, unofficial project and is not affiliated with Nintendo or Hudson.

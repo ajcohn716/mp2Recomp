@@ -19,6 +19,7 @@ dependencies:
   - glib
   - zlib
   - expat
+  - openssl=3
   - patchelf
   - conda-pack=0.8
   - pip:

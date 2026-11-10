@@ -18,5 +18,9 @@
   "directx-headers": {
     "url": "https://github.com/microsoft/DirectX-Headers.git",
     "commit": "5760f9342487777c39b6938d4f2118fcdf6c2664"
+  },
+  "libdatachannel": {
+    "url": "https://github.com/paullouisageneau/libdatachannel.git",
+    "commit": "6b1e2e620f1e37f0eafeee702eaea0043cb305fd"
   }
 }

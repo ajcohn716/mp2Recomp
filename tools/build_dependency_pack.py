@@ -36,7 +36,7 @@ def main():
         packed.unlink()
         python=stage/'toolchain/bin/python'
     sources=stage/'sources';sources.mkdir(exist_ok=True)
-    for name in ('N64Recomp','runtime','rt64','directx-headers'):copytree(ROOT/name,sources/name)
+    for name in ('N64Recomp','runtime','rt64','directx-headers','libdatachannel'):copytree(ROOT/name,sources/name)
     decomp=sources/'decomp';decomp.mkdir(exist_ok=True)
     for name in ('marioparty2.yaml','symbol_addrs.txt'):shutil.copy2(ROOT/'decomp'/name,decomp/name)
     # Preserve license files and package metadata; only game metadata is taken
@@ -83,8 +83,9 @@ def main():
     subprocess.run([cmake,'--fresh','-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
         '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
-    subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','-j',args.jobs,'--','-k','0'],env=env,check=True)
+    subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','netplay_test','-j',args.jobs,'--','-k','0'],env=env,check=True)
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
+    subprocess.run([str(check/('netplay_test'+suffix))],env=env,check=True)
     for path in stage.rglob('*'):
         if path.is_file() and path.suffix.lower() in ('.z64','.v64','.n64'):raise SystemExit('ROM-like file rejected: '+str(path))
     name='mp2recomp-sdk-'+args.platform

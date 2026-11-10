@@ -17,7 +17,9 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--metadata',type=Path,required=True)
     p.add_argument('--bundle-sdk',action='store_true',help='Include the matching offline SDK beside the installer');p.add_argument('--tag',required=True);p.add_argument('--repository',default='ajcohn716/mp2Recomp');args=p.parse_args()
     subprocess.run([sys.executable,str(ROOT/'tools/audit_repository.py')],cwd=ROOT,check=True)
-    source=ROOT/'build/installer-source';source.mkdir(parents=True,exist_ok=True)
+    source=ROOT/'build/installer-source'
+    if source.exists():shutil.rmtree(source)
+    source.mkdir(parents=True)
     for name in source_files():
         data=subprocess.check_output(['git','show',':'+name],cwd=ROOT)
         target=source/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
@@ -33,6 +35,8 @@ def main():
         '--distpath',str(dist),'--add-data',str(source)+os.pathsep+'source',
         '--hidden-import','tools.installer_gui',str(ROOT/'install.py')],cwd=ROOT,check=True)
     folder=dist/'mp2recomp-installer'
+    for name in ('LICENSE','THIRD_PARTY_NOTICES.md','README.md'):
+        shutil.copy2(source/name,folder/name)
     if os.name=='nt':
         required={'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll'}
         missing=required-{p.name.lower() for p in folder.rglob('*.dll')}

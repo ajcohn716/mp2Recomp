@@ -1,6 +1,7 @@
 #include "librecomp/overlays.hpp"
 #include "recomp_overlays.inl"
 #include "guest_memory.hpp"
+#include "netplay_game.hpp"
 
 extern "C" {
 void HuPrcCall(uint8_t*, recomp_context*);
@@ -25,6 +26,7 @@ void mp2_entry(uint8_t* rdram, recomp_context* ctx) {
     // IPL3 loads the main image. The original entrypoint clears this BSS and
     // jumps indirectly to main after establishing its stack.
     for (uint32_t off = 0; off < 0x2DC10; off += 4) MEM_W(off, 0x800D4BF0) = 0;
+    netplay::game::initialize(rdram);
     ctx->r29 = (int32_t)0x800FC730;
     func_80000460_1060(rdram, ctx);
 }

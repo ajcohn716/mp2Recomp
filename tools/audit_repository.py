@@ -6,6 +6,21 @@ import sys
 # Deliberately enumerate the reviewed publication surface. No broad glob may
 # accidentally admit a ROM, asset, dependency checkout, or generated code.
 ALLOWED = {
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/releases/v0.1.md",
+    "cmake/Netplay.cmake",
+    "src/netplay_crypto.hpp",
+    "src/netplay_crypto.cpp",
+    "src/netplay.hpp",
+    "src/netplay.cpp",
+    "src/netplay_game.hpp",
+    "src/netplay_game.cpp",
+    "src/netplay_lobby.cpp",
+    "tests/netplay_test.cpp",
+    "tools/test_game_netplay.py",
+    "docs/netplay.md",
+
     ".gitignore",
     "install.py",
     ".github/workflows/build.yml",

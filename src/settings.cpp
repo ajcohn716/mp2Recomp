@@ -98,7 +98,7 @@ void draw() {
         box({216+value*3,y+3,8,16},{217,234,255,255});text(540,y,std::to_string(value)+"%");
     }
     button(24,210,130,muted?"Unmute":"Mute",muted);
-    text(24,254,"Controller (port 1)");
+    text(24,254,"Your controller");
     std::string device=controller?SDL_GameControllerName(controller):"Keyboard only";
     button(220,250,420,device+"  >");
     text(24,340,"Input");text(220,340,"Keyboard");text(430,340,"Controller button");

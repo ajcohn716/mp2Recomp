@@ -8,6 +8,9 @@ on:
         default: ''
   push:
     tags: ['v*']
+concurrency:
+  group: installer-release-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: read
   actions: read
@@ -52,6 +55,7 @@ jobs:
             mingw-w64-clang-x86_64-ninja
             mingw-w64-clang-x86_64-SDL2
             mingw-w64-clang-x86_64-SDL2_ttf
+            mingw-w64-clang-x86_64-openssl
       - if: runner.os == 'Windows'
         name: Install generation tools into a relocatable Python distribution
         shell: pwsh
@@ -132,13 +136,27 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           merge-multiple: true
           path: artifacts
+      - name: Package matching integration source
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python tools/audit_repository.py
+          git archive --format=tar.gz --prefix="mp2recomp-$RELEASE_TAG/" -o "artifacts/mp2recomp-source-$RELEASE_TAG.tar.gz" HEAD
+          cd artifacts
+          sha256sum mp2recomp-*.tar.gz mp2recomp-*.zip > SHA256SUMS
       - name: Create draft release with installers and dependency packs
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --generate-notes artifacts/*
+        run: |
+          if test -f "docs/releases/$RELEASE_TAG.md"; then
+            gh release create "$RELEASE_TAG" --draft --title "mp2Recomp $RELEASE_TAG" --notes-file "docs/releases/$RELEASE_TAG.md" artifacts/*
+          else
+            gh release create "$RELEASE_TAG" --draft --title "mp2Recomp $RELEASE_TAG" --generate-notes artifacts/*
+          fi

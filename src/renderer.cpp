@@ -76,3 +76,24 @@ public:
 std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_renderer(uint8_t* rdram, ultramodern::renderer::WindowHandle window, bool) {
     return std::make_unique<MP2Renderer>(rdram, window);
 }
+
+// Used by deterministic multi-instance checks. CPU and audio tasks still run;
+// graphics are acknowledged without creating a Vulkan device.
+namespace {
+class NullRenderer final : public ultramodern::renderer::RendererContext {
+public:
+    NullRenderer() {setup_result = ultramodern::renderer::SetupResult::Success; chosen_api = ultramodern::renderer::GraphicsApi::Vulkan;}
+    bool valid() override {return true;}
+    bool update_config(const ultramodern::renderer::GraphicsConfig&, const ultramodern::renderer::GraphicsConfig&) override {return false;}
+    void enable_instant_present() override {}
+    void send_dl(const OSTask*) override {}
+    void send_dummy_workload(uint32_t) override {}
+    void update_screen() override {}
+    void shutdown() override {}
+    uint32_t get_display_framerate() const override {return 60;}
+    float get_resolution_scale() const override {return 1.f;}
+};
+}
+std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_null_renderer(uint8_t*, ultramodern::renderer::WindowHandle, bool) {
+    return std::make_unique<NullRenderer>();
+}

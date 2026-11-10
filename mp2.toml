@@ -12,3 +12,17 @@ ignored = [
   "mp2_setjmp", "mp2_longjmp",
   "HuPrcCall", "HuPrcSleep", "HuPrcChildWatch", "HuPrcTerminate",
 ]
+
+# Online mode bypasses asynchronous pad acquisition and latches a single agreed
+# sample before the original game's input processing, including button edges.
+[[patches.hook]]
+func = "func_80016A44_17644"
+text = "extern int mp2_netplay_active(void); if (mp2_netplay_active()) return;"
+
+[[patches.hook]]
+func = "func_80016B44_17744"
+text = "extern int mp2_netplay_active(void); if (mp2_netplay_active()) return;"
+
+[[patches.hook]]
+func = "func_80016F54_17B54"
+text = "extern void mp2_netplay_latch(uint8_t*, recomp_context*); mp2_netplay_latch(rdram, ctx);"
