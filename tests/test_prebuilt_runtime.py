@@ -56,6 +56,13 @@ class PrebuiltRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'ROM-free'):
             pack_runtime(self.source, self.build, self.runtime)
 
+    def test_windows_compatibility_header_invalidates_cached_sdk(self):
+        pack_runtime(self.source, self.build, self.runtime)
+        with (self.source / 'src/mingw_compat.hpp').open('a') as stream:
+            stream.write('\n// Changed runtime compilation input\n')
+        with self.assertRaisesRegex(RuntimeError, 'does not match'):
+            validate_runtime(self.source, self.runtime)
+
     def test_changed_recipe_and_corrupt_archive_are_rejected(self):
         pack_runtime(self.source, self.build, self.runtime)
         (self.runtime / 'libraries/rt64.a').write_bytes(b'corrupt')

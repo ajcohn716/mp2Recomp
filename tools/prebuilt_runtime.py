@@ -7,6 +7,7 @@ import shutil
 RECIPE_FILES = (
     'dependencies.json', 'CMakeLists.txt', 'cmake/PrebuiltRuntime.cmake',
     'cmake/MinGWCompat.cmake', 'cmake/Netplay.cmake',
+    'src/mingw_compat.hpp',
     'tools/build_dependency_pack.py', 'tools/prebuilt_runtime.py',
     'tools/build_sdl.py', 'tools/dependency-environment.yml',
 )
