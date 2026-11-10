@@ -237,7 +237,7 @@ class Installer:
             if not rom_file.exists() or hashlib.sha1(rom_file.read_bytes()).hexdigest()!=ROM_SHA1:
                 rom_file.write_bytes(data)
             from tools.dependency_pack import ensure_sdk,load_sdk,sdk_environment
-            sdk=None;crt_files=[]
+            sdk=None;crt_files=[];prebuilt_runtime=None
             if source_build:
                 self.status('Fetching pinned build dependencies')
                 self.run([sys.executable,'tools/bootstrap.py'],source)
@@ -247,6 +247,11 @@ class Installer:
             else:
                 sdk=ensure_sdk(cache,ROOT,self.run,self.status,self.check_cancelled,dependency_pack,sdk_dir)
                 metadata=load_sdk(sdk);env=sdk_environment(sdk,metadata)
+                if metadata.get('prebuilt_runtime'):
+                    from tools.prebuilt_runtime import validate_runtime
+                    prebuilt_runtime=sdk/metadata['prebuilt_runtime']
+                    self.status('Verifying precompiled runtime libraries')
+                    validate_runtime(source,prebuilt_runtime)
                 tool=lambda name:str(sdk/metadata['tools'][name])
                 python=tool('python');cmake=tool('cmake');cc=tool('cc');cxx=tool('cxx')
                 self.status('Preparing bundled source dependencies')
@@ -264,7 +269,8 @@ class Installer:
             self.run(regenerate,source,env)
             self.status('Configuring the native build')
             configure=[cmake,'-S','.', '-B','build/native','-G','Ninja','-DCMAKE_BUILD_TYPE=Release',
-                '-DCMAKE_C_COMPILER='+cc,'-DCMAKE_CXX_COMPILER='+cxx,'-DCMAKE_POLICY_VERSION_MINIMUM=3.5']
+                '-DCMAKE_C_COMPILER='+cc,'-DCMAKE_CXX_COMPILER='+cxx,'-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
+                '-DMP2_PREBUILT_RUNTIME='+str(prebuilt_runtime or '')]
             if sdk:
                 configure+=['-DCMAKE_MAKE_PROGRAM='+tool('ninja'),'-DCMAKE_PREFIX_PATH='+str(sdk/'toolchain'),
                     '-DSDL2_DIR='+str(sdk/'toolchain/lib/cmake/SDL2'),'-DSDL2_ttf_DIR='+str(sdk/'toolchain/lib/cmake/SDL2_ttf')]

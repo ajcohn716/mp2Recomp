@@ -43,6 +43,7 @@ jobs:
         run: |
           python -m pip install -r tools/installer-requirements.txt
           python -m unittest discover -s tests -p test_installer.py -v
+          python -m unittest discover -s tests -p test_prebuilt_runtime.py -v
           python install.py --gui-smoke-test
   linux:
     runs-on: ubuntu-24.04
@@ -58,6 +59,7 @@ jobs:
           build/test-env/bin/pip install -r tools/installer-requirements.txt
           python3 tools/audit_repository.py
           build/test-env/bin/python -m unittest discover -s tests -p test_installer.py -v
+          build/test-env/bin/python -m unittest discover -s tests -p test_prebuilt_runtime.py -v
           build/test-env/bin/python install.py --gui-smoke-test
           tools/test_settings.sh
           clang++ -std=c++20 -Isrc $(pkg-config --cflags libcurl) tests/public_ip_test.cpp src/public_ip.cpp $(pkg-config --libs libcurl) -o build/public_ip_test

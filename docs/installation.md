@@ -116,3 +116,16 @@ verification before publication; manual runs also provide Actions artifacts.
 For installer-only changes, workflow dispatch can reuse a verified SDK run via
 `sdk_run_id`. Its dependency pins and toolchain recipe must match; leave the field
 blank to rebuild both SDKs.
+
+Version 0.2 introduces precompiled open-source runtime libraries. Its first
+release must rebuild both SDKs; older SDK artifacts cannot be reused by the
+release packager. Only explicitly allowlisted dependency archives enter the
+runtime library set. Game code, microcode, and compiled test fixtures are
+excluded. Before packaging, a fresh ROM-free consumer build must link the
+libraries, pass its self-tests, and compile no dependency objects. The installer
+checks the runtime recipe, archive checksums, and compiler/platform compatibility
+before using them.
+
+A compiler is still bundled because installation generates, compiles, and links
+game code locally from the user's ROM. Explicitly supplied older SDKs without
+precompiled libraries retain the full local build path.

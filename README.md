@@ -33,10 +33,11 @@ driver** and your own unmodified **Mario Party 2 USA ROM**. The installer accept
    it finishes. Press **Enter** to skip the opening; use the **arrow keys** to
    move and **X** or **Space** for A. Press **F1** for settings.
 
-The installer includes Python, a compiler, and the runtime dependencies. It builds
-game code locally from your ROM, so installation includes compilation. The
-included SDK allows offline installation. No ROM or game assets are distributed
-with this project.
+The installer includes Python, a compiler, and verified precompiled open-source
+runtime libraries. It generates and compiles game code locally from your ROM,
+then links it with those libraries. The included SDK allows offline installation
+and reduces local build work. No ROM, generated game code, or game assets are
+distributed with this project.
 
 To play again, use the application shortcut, run `./play` from the Linux
 installation directory, or open `mp2recomp.exe` on Windows. To upgrade, run the

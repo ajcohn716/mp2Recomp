@@ -29,6 +29,9 @@ Spacewar App ID 480 for standalone builds. See https://partner.steamgames.com/.
 
 The installer SDK contains source trees for N64Recomp, N64ModernRuntime, RT64,
 DirectX-Headers and libdatachannel, including their bundled license files.
+It also includes precompiled static libraries from these open-source runtime
+dependencies. Their matching sources, build recipes and license notices remain
+in the same SDK; ROM-derived game libraries and microcode are not packaged.
 Only the Splat configuration and symbol metadata from the community Mario Party 2
 decompilation are used for local generation; game source and assets are excluded.
 

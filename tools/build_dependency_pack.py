@@ -87,9 +87,10 @@ def main():
     # A dependency pack is publishable only after compiling and running the
     # complete host runtime with synthetic (non-game) link fixtures.
     check=ROOT/'build/sdk-platform-check'
-    subprocess.run([cmake,'--fresh','-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
+    configure=[cmake,'--fresh','-S',str(ROOT),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
-        '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
+        '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags]
+    subprocess.run([*configure,'-B',str(check),'-DMP2_PREBUILT_RUNTIME='],env=env,check=True)
     subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','netplay_test','public_ip_test','-j',args.jobs,'--','-k','0'],env=env,check=True)
     subprocess.run([str(check/('mp2recomp'+suffix)),'--self-test'],env=env,check=True)
     subprocess.run([str(check/('netplay_test'+suffix))],env=env,check=True)
@@ -107,6 +108,22 @@ def main():
             subprocess.run(['xvfb-run','-a',str(installed/'mp2recomp'),'--runtime-self-test'],env=probe_env,check=True)
             from tools.test_wayland import test_wayland
             test_wayland(installed/'mp2recomp',probe_env)
+    from tools.prebuilt_runtime import pack_runtime,validate_runtime
+    metadata=pack_runtime(ROOT,check,stage/'runtime')
+    validate_runtime(ROOT,stage/'runtime')
+    data['prebuilt_runtime']='runtime'
+    (stage/'sdk.json').write_text(json.dumps(data,indent=2))
+    # A fresh consumer must link with no dependency compilation. This uses
+    # synthetic game fixtures only, on both Linux and Windows Actions runners.
+    consumer=ROOT/'build/sdk-prebuilt-check'
+    if consumer.exists():shutil.rmtree(consumer)
+    subprocess.run([*configure,'-B',str(consumer),'-DMP2_PREBUILT_RUNTIME='+str(stage/'runtime')],env=env,check=True)
+    subprocess.run([cmake,'--build',str(consumer),'--target','mp2recomp','netplay_test','public_ip_test','-j',args.jobs],env=env,check=True)
+    for name,flags in (('mp2recomp',['--self-test']),('netplay_test',[]),('public_ip_test',[])):
+        subprocess.run([str(consumer/(name+suffix)),*flags],env=env,check=True)
+    for name in ('rt64','runtime','libdatachannel'):
+        if any(p.suffix in ('.o','.obj') for p in (consumer/name).rglob('*')):
+            raise SystemExit('Prebuilt runtime check unexpectedly compiled '+name)
     for path in stage.rglob('*'):
         if path.is_file() and path.suffix.lower() in ('.z64','.v64','.n64'):raise SystemExit('ROM-like file rejected: '+str(path))
     name='mp2recomp-sdk-'+args.platform
@@ -115,6 +132,6 @@ def main():
         archive=args.output/(name+'.tar.gz')
         with tarfile.open(archive,'w:gz',compresslevel=3) as tar:
             for item in sorted(stage.iterdir()):tar.add(item,arcname=item.name)
-    (args.output/(name+'.json')).write_text(json.dumps({'platform':args.platform,'filename':archive.name,'sha256':sha256(archive)},indent=2))
+    (args.output/(name+'.json')).write_text(json.dumps({'platform':args.platform,'filename':archive.name,'sha256':sha256(archive),'runtime_recipe':metadata['recipe']},indent=2))
     print(archive)
 if __name__=='__main__':main()
