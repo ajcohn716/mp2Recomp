@@ -1,70 +1,78 @@
-# Direct room multiplayer
+# Steam and direct room multiplayer
 
-Experimental input netplay for two to four players using the supported Mario
-Party 2 USA ROM. Each player runs the game locally and owns one N64 controller
-port. One player's computer hosts the room and distributes agreed input frames.
+Experimental deterministic input netplay for two to four players using the
+supported Mario Party 2 USA ROM. Each player runs the game locally and owns one
+N64 controller port. The host distributes agreed input frames. Steam P2P is the
+default transport; Direct TCP is also available for LAN play and local tests.
 
-There is no shared room server, relay, matchmaking backend, account service or
-STUN service. Opening Netplay with the default host address makes a background
-HTTPS request to `https://ipv4.icanhazip.com/` to prefill your public IPv4 address.
-The service sees your outbound IP; no ROM, save, session key or connection code
-is sent to it. Lookup has a five-second timeout, and failure allows manual entry.
-The host listens on one TCP port. A shareable connection code contains the host
-address, port and a fresh random session key, so it is longer than a short lobby
-code. Code generation and joining don't require third-party infrastructure.
+## Steam rooms
 
-## Host a game
+Use a Steam-enabled build (see below). Start Steam and sign in before creating
+or joining a room. Each player needs a separate Steam account and computer.
+Steamworks uses **Spacewar App ID 480 permanently**, including standalone
+launches. This project does not require a Steam store launch or a different
+production App ID. There is no automatic App ID migration or replacement step.
 
-1. Forward TCP port **7777** on your router to your gaming computer's LAN IP.
-   Allow inbound TCP 7777 through that computer's firewall. Use a stable LAN IP
-   or router DHCP reservation so the forwarding rule stays valid.
-2. Press **F1**, select **Netplay**, and let the host address fill in automatically.
-   Use **Detect public IP** to retry if needed. You can also enter your public
-   IP manually or use a DNS name you control that points to it.
-3. Check the host address and TCP port. You can open this tab before boot with `./run.sh --netplay`
-   (installed Linux: `./play --netplay`; Windows: `mp2recomp.exe --netplay`).
-4. Click **Create room**, then **Copy code**. Share the whole `MP2-...` code
-   privately with friends. It grants access to this session.
-5. When everyone is connected, click **Start game**. The host is player 1;
-   guests get ports 2–4 in join order. Unoccupied ports report disconnected.
+1. Open **F1 > Netplay**, or launch `./run.sh --netplay` (installed Linux:
+   `./play --netplay`; Windows: `mp2recomp.exe --netplay`).
+2. Leave **Transport: Steam (App ID 480)** selected and click **Create room**.
+3. Click **Copy code** and share the complete `MP2S-...` code privately.
+4. Friends paste that code into **Join with a connection code**, then click
+   **Join room**. The code automatically selects Steam regardless of their
+   current transport selection.
+5. When everyone is connected, the host clicks **Start game**.
 
-Guests open **F1 > Netplay** (or launch with `--netplay`), paste the code and
-click **Join room**. Creating or joining during offline play restarts the game
-into the lobby; the current offline game cannot be continued online. They don't
-need to forward a port, run a service, or enter a separate address. The address
-fields are for creating a room; joining reads the address from the code.
+No public-IP lookup, router port forwarding, web room server, or separate
+matchmaking backend is needed for Steam rooms. The code contains the host's
+Steam identity and a fresh random session key. Networking uses
+`ISteamNetworkingSockets::CreateListenSocketP2P` / `ConnectP2P`, Steam's rendezvous
+service, and Steam Datagram Relay support. Both sides use virtual port **0**;
+TCP port settings do not apply. Valve's Steam service is required.
 
-For LAN play, advertise the host's LAN IP instead; no router forwarding is
-needed. `127.0.0.1` works only when all clients run on the same computer.
-Typing or pasting a host address prevents an in-flight lookup from replacing it.
-Explicit `--host-address` values skip automatic lookup, including `127.0.0.1`
-for local testing. Pasting a friend's code does not need a successful lookup.
-An alternative port can be chosen, but the router's external and internal port
-numbers must match the advertised port in this version.
+Command-line examples:
 
-You can prefill the fields from the command line:
+```sh
+./run.sh --netplay --netplay-transport steam
+./run.sh --join 'MP2S-PASTE_THE_FULL_CODE_HERE'
+```
+
+The host is player 1; guests receive ports 2–4 in join order. Unoccupied ports
+report disconnected. Creating or joining during offline play restarts the game
+into the lobby; an offline game cannot be continued online. Every player joins
+before boot. Late joining, reconnecting, spectators and host migration are not
+supported. Disconnects and detected state mismatches stop the session.
+
+Each player's normal keyboard/controller bindings apply to their assigned port.
+Settings suppress that player's input while the game continues. The game still
+chooses human/CPU players through its own menus.
+
+## Direct TCP rooms
+
+Select **Transport: Direct TCP** in the Netplay tab. The host forwards TCP port
+**7777** to their gaming computer and allows it through their firewall. Enter the
+host's public IP or DNS name, click **Create room**, then share the `MP2-...` code.
+Use the host's LAN IP for LAN play, or `127.0.0.1` for processes on one computer.
+Guests paste the code; they do not need to forward a port. Steam is not used.
+
+Direct mode can make a background HTTPS request to
+`https://ipv4.icanhazip.com/` to prefill the public IPv4 address. Only that service
+sees the lookup's outbound IP; no ROM, save, session key or code is sent to it.
+The lookup times out after five seconds and allows manual entry on failure.
+**Detect public IP** retries. Manual edits and explicit `--host-address` values
+are preserved. Steam mode never starts this lookup.
 
 ```sh
 ./run.sh --netplay --host-address 203.0.113.10 --host-port 7777
 ./run.sh --join 'MP2-PASTE_THE_FULL_CODE_HERE'
 ```
 
-The IP above is an example address. Each new hosted session generates a new key
-and code. Codes stop working when the host exits. Everyone joins before boot;
-late join, reconnection, spectators and host migration are not supported.
-Disconnects and detected state mismatches stop the session.
-
-Some ISPs put customers behind carrier-grade NAT, where router forwarding alone
-cannot expose the host's port. In that case another player with a reachable
-connection must host, or the host must arrange a public address with their ISP.
-There is deliberately no relay fallback.
-Public-IP detection does not configure port forwarding or bypass carrier-grade NAT.
-If a VPN is active, the detected address may be the VPN's exit address; check
-that it is the address on which your forwarded port can actually be reached.
-
-Each player's usual keyboard/controller bindings apply to their assigned port.
-F1 opens settings; settings suppress that player's input while the game continues.
-The game still chooses human/CPU players through its own menus.
+`--host-address` selects Direct TCP for compatibility with existing scripts.
+An explicit `--netplay-transport steam` after it switches back to Steam. The IP
+above is an example. Direct invitations include the address, port and session
+key. Router external/internal ports must match. Carrier-grade NAT may prevent
+hosting direct rooms; Steam rooms provide an alternative. Direct mode has no
+relay fallback. Public-IP lookup does not configure port forwarding; with a VPN,
+the detected IP may be its exit address.
 
 ## Saves and compatibility
 
@@ -81,67 +89,100 @@ source fingerprint is checked before assigning a controller slot. ROM bytes are
 not sent over the network. Complete game determinism across operating systems
 is still unverified; use matching platform builds for initial testing.
 
-## Transport
+## Transport and privacy
 
-The host-to-guest connections use reliable ordered TCP streams through
-libdatachannel's WebSocket implementation. Gameplay stays on the host and guest
-computers. TCP retransmission may cause visible stalls on lossy links; input
-netplay waits rather than inventing missing inputs. Three frames of buffering
-let inputs travel ahead of the frame that consumes them.
+Both transports carry the same ordered, reliable session protocol. Steam uses
+reliable messages with Nagle disabled; Direct TCP uses libdatachannel WebSockets.
+Input netplay waits for missing inputs, with three frames of buffering. Rollback
+is not implemented; loss and latency can cause visible stalls.
 
-Messages are authenticated and encrypted with OpenSSL AES-256-GCM. The random
-256-bit key is embedded in the invitation, never sent in the connection handshake.
-Fresh client/host nonces and HKDF-SHA256 derive separate directional keys for
-each connection. Authenticated sequence numbers reject replays and reordered
-records. Authentication must succeed before a guest receives a slot, save or
-input stream. Connections, message sizes, queued work and pending frames are
-bounded. This is a friends-only room, not an internet matchmaking service.
-Anyone given the full code can join an unstarted room; share it privately.
+Both retain the room's OpenSSL AES-256-GCM authentication. The random 256-bit key
+is in the invitation and never sent in the handshake. Fresh peer nonces and
+HKDF-SHA256 derive separate directional keys; authenticated sequence numbers
+reject replays, reflection and reordering. Authentication and build checks occur
+before a guest receives a controller slot, save or input stream. Message sizes,
+connections, queued work and pending frames are bounded.
 
-The host address is visible to everyone with the code. Starting a new room changes
-the key, but doesn't change the host's address. Diagnostic logs contain connection
-codes; keep them private. Session codes are never used as save-directory names.
+Anyone with the full code can join an unstarted room. Share codes privately.
+Steam rooms expose the host's Steam ID in the invitation; Direct rooms expose
+the host address. Diagnostic logs contain codes and should stay private. Starting
+a new room generates a new key. Codes expire when the host leaves; session codes
+are never used as save-directory names.
 
-## Build and test
+## Build with Steamworks
 
-`tools/bootstrap.py` fetches pinned libdatachannel source and submodules.
-OpenSSL and libcurl (7.71 or newer) development files are required alongside existing
-build dependencies. The installer SDK and CI recipes include both libraries.
-After changing recompiler hooks in `mp2.toml`, regenerate game code locally.
-The transport tests don't need a ROM or Vulkan:
+Obtain the Steamworks SDK (validated with version 1.65) from Valve and extract it outside tracked source (for
+example `build/steamworks-sdk`). It must contain `public/steam/steam_api.h` and
+`redistributable_bin`. No SDK headers or binaries are committed or fetched by
+`tools/bootstrap.py`. The SDK is an explicit local build input, separate from
+the project's open-source dependency pack.
+
+```sh
+cmake -S . -B build/native -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DMP2_STEAMWORKS_SDK="$PWD/build/steamworks-sdk"
+cmake --build build/native --target mp2recomp -j 6
+```
+
+The build integration targets Linux and Windows x86-64; Windows Steam builds
+have not been verified locally. CMake copies
+`libsteam_api.so` or `steam_api64.dll`, plus `steam_appid.txt` containing **480**,
+next to the executable. Keep these with the executable when moving a build.
+Initialization also sets `SteamAppId` and `SteamGameId` to 480, so standalone
+launches from another working directory use the same identity. Steam must run
+under the same OS user. Initialization happens only when entering a Steam room;
+offline and Direct TCP play do not initialize Steam.
+
+Without `MP2_STEAMWORKS_SDK`, builds remain usable offline and over Direct TCP;
+attempting a Steam room reports how to enable it. Existing installer SDK recipes
+do not include Valve's SDK; use an explicitly Steam-enabled source build for
+Steam rooms. The Steam SDK/runtime retain Valve's terms and are not covered by
+this repository's source license.
+
+## Tests
+
+The transport tests need neither a ROM nor Vulkan:
 
 ```sh
 python tools/bootstrap.py
-cmake -S . -B build/netplay -G Ninja -DMP2_NETPLAY_ONLY=ON \
-  -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-cmake --build build/netplay --target netplay_test -j 4
-./build/netplay/netplay_test
+cmake -S . -B build/steam-netplay -G Ninja -DMP2_NETPLAY_ONLY=ON \
+  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DMP2_STEAMWORKS_SDK="$PWD/build/steamworks-sdk"
+cmake --build build/steam-netplay --target netplay_test netplay_steam_test -j 4
+./build/steam-netplay/netplay_test
+./build/steam-netplay/netplay_steam_test
+./tools/test_settings.sh
 ```
 
-These tests run real direct socket connections to a local host. They check
-four-controller input ownership/order under asymmetric scheduling, common
-seed/save state, injected desynchronization, bad invitation keys, full rooms,
-late joins, slot reuse and disconnects. Cryptographic checks reject tampering,
-replays, wrong keys and reflected records. No external service is contacted.
+`netplay_test` runs real Direct TCP peers: four-controller ownership/order under
+asymmetric scheduling, common seed/save, desync detection, wrong keys, full rooms,
+late joining, slot reuse and disconnects. It also checks both invitation formats
+and cryptographic tamper/replay/wrong-key/reflection rejection. No external
+service is contacted. Omit the SDK path to test SDK-free builds.
 
-Actual-game tests need a local ROM and full build, plus Python 3.10+ (stdlib only):
+`netplay_steam_test` requires a running, signed-in Steam client. It exercises the
+real Steam API under App ID 480, creates a P2P listener and encrypted UDP loopback
+pair, checks reliable text/binary ordering and bounds, and shuts down/reinitializes
+the API. It does not use a mock SDK. It does **not** simulate multiple Steam users
+or prove that a remote relay connection works.
+
+Actual-game tests require a local ROM and full build, plus Python 3.10+:
 
 ```sh
 python tools/test_game_netplay.py --frames 1200
 ```
 
-This acquires a machine-wide test lease, starts four isolated game processes,
-supplies scripted four-port input, and compares private traces. Its children are
-cleaned up on failure. No offline saves are modified. `--save PATH` supplies a
-copy of an existing EEPROM for initialized-save testing. Logs and memory-derived
-checkpoints stay under ignored `build/`. The default local test port is 17777;
-`--port` changes it.
+The script acquires a machine-wide lease, starts four isolated game processes
+over Direct TCP, supplies scripted four-port input, and compares private traces.
+Children are cleaned up on failure; offline saves are untouched. `--save PATH`
+supplies a copy of an initialized EEPROM. Logs and memory-derived checkpoints
+remain under ignored `build/`. The default test port is 17777; `--port` changes it.
 
-Locally verified on November 9, 2026: four actual Linux game processes completed
-2,400 matching input frames, RNG states and canonical gameplay checkpoints using
-an initialized EEPROM; the native room window completed create, join, copy-code
-and start with two actual clients. Transport/authentication tests and the existing
-settings, installer and native-fiber checks pass.
+Validated locally on November 10, 2026: Linux full-game Steam room creation,
+real Steam API listener and UDP loopback checks (SDK 1.65), both SDK-enabled and
+SDK-free direct transport tests, settings integration, and four actual game
+processes with 1,200 matching input/RNG/checkpoint frames over Direct TCP.
 
 ## Synchronization and current limits
 
@@ -159,9 +200,12 @@ memory, so it is a desync detector rather than a complete determinism proof.
 The private test traces compare those checkpoints on every input frame.
 
 The port was a boot/title proof of concept before netplay. Four-client menu
-checks don't establish that every board or minigame works. Separate home
-networks, Linux/Windows cross-play, complete boards/minigames, long sessions and
+checks don't establish that every board or minigame works. Steam sessions across
+separate accounts/home networks, Linux/Windows cross-play, complete boards/minigames, long sessions and
 hostile-network soak testing still need validation. Rollback isn't implemented.
 
 Dependencies: [libdatachannel](https://github.com/paullouisageneau/libdatachannel)
 (MPL-2.0) and [OpenSSL](https://www.openssl.org/) retain their respective licenses.
+
+Steamworks API references: [initialization](https://partner.steamgames.com/doc/sdk/api),
+[P2P networking](https://partner.steamgames.com/doc/api/ISteamNetworkingSockets).

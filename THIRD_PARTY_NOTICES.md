@@ -22,7 +22,12 @@ and their recursive submodules for development builds.
 | Splat | MIT | https://github.com/ethteck/splat |
 | spimdisasm | MIT | https://github.com/Decompollaborate/spimdisasm |
 
-The SDK contains source trees for N64Recomp, N64ModernRuntime, RT64,
+Optional Steam-enabled source builds also link Valve's Steamworks runtime. The
+Steamworks SDK is supplied separately and retains Valve's terms; it is not part
+of the open-source dependency pack or this repository. The integration uses
+Spacewar App ID 480 for standalone builds. See https://partner.steamgames.com/.
+
+The installer SDK contains source trees for N64Recomp, N64ModernRuntime, RT64,
 DirectX-Headers and libdatachannel, including their bundled license files.
 Only the Splat configuration and symbol metadata from the community Mario Party 2
 decompilation are used for local generation; game source and assets are excluded.

@@ -124,8 +124,8 @@ Run `./tools/test_settings.sh` for the headless settings integration check.
 
 The Graphics tab applies render resolution (original, 2x–4x, or fit window),
 aspect ratio (4:3, 16:9, or fit window), fullscreen, and output filtering live.
-The Netplay tab lets you create a room with a host address/port or paste a
-friend's connection code to join. Creating or joining from offline play restarts
+The Netplay tab creates Steam P2P rooms using Spacewar App ID 480, or Direct TCP
+rooms using a host address/port. Paste a friend's connection code to join. Creating or joining from offline play restarts
 the game into the room lobby so everyone boots from the same state. Copy the
 code, check connected players, and start or leave the room from that same tab.
 
@@ -143,21 +143,25 @@ See [debug controls and artifact format](docs/debugging.md).
 
 ## Experimental room multiplayer
 
-Launch `./run.sh --netplay` (installed Linux: `./play --netplay`; Windows:
-`mp2recomp.exe --netplay`). The host's public IPv4 is filled in automatically;
-it can be replaced with a LAN IP or DNS name. The host forwards TCP port 7777,
-creates a room, and copies its connection code. Friends paste the
-code to join, then the host starts. Two to four clients synchronize N64 controller
-inputs over encrypted direct connections. Each player controls one assigned port.
+Steam-enabled builds use **Spacewar App ID 480 permanently**. Launch
+`./run.sh --netplay`, leave **Transport: Steam (App ID 480)** selected, create a
+room and share its `MP2S-...` code. Friends paste the code to join; the host starts
+when everyone is connected. Each player needs Steam running and signed in on
+their own account/computer. Steam P2P supports relay connections without public-IP
+lookup or port forwarding. Two to four clients synchronize N64 controller inputs;
+each player owns one assigned port. Session saves stay separate from offline saves.
 
-No shared room backend, relay or matchmaking service is used. Opening Netplay
-with the default host address makes an HTTPS request to `ipv4.icanhazip.com`
-to prefill it; **Detect public IP** retries. Manual addresses and explicit
-`--host-address` values are preserved. Lookup failure allows manual entry.
-Connection codes contain the host address and session key, so share them privately.
-See [netplay setup, port forwarding and tests](docs/netplay.md). Session saves
-are isolated from offline saves. This is experimental; complete boards/minigames,
-separate home networks and Linux/Windows cross-play still need validation.
+Build with `-DMP2_STEAMWORKS_SDK=/path/to/steamworks/sdk` to enable Steam support.
+The SDK is supplied separately; existing installer dependency packs do not include
+it. Builds without it support offline play and Direct TCP. Select **Direct TCP**
+for LAN play or manual hosting; it uses the existing `MP2-...` invitations and
+requires TCP port forwarding for internet hosts. Direct mode can prefill the
+public IP using `ipv4.icanhazip.com`; Steam mode never performs that lookup.
+
+See [Steam/Direct setup, SDK build instructions and tests](docs/netplay.md).
+This is experimental. Steam loopback is checked locally; cross-account Steam
+sessions, separate home networks, complete boards/minigames and Linux/Windows
+cross-play still need validation.
 
 ## Rebuild
 
