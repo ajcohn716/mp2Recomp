@@ -5,6 +5,7 @@
 #include <openssl/crypto.h>
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -14,6 +15,14 @@ namespace {
 void require(bool ok){if(!ok)throw std::runtime_error("Encrypted peer authentication failed");}
 void address_check(const std::string& address) {
     if(address.empty()||address.size()>253||!std::all_of(address.begin(),address.end(),[](unsigned char c){return std::isalnum(c)||c=='.'||c=='-'||c==':';}))throw std::runtime_error("Enter a public IP address or DNS name without a URL or port");
+}
+void steam_id_check(const std::string& address) {
+    uint64_t id{};
+    auto [end,err]=std::from_chars(address.data(),address.data()+address.size(),id);
+    // Public-universe individual Steam accounts only, with a nonzero account ID.
+    if(err!=std::errc{}||end!=address.data()+address.size()||std::to_string(id)!=address||
+       (id>>56)!=1||((id>>52)&15)!=1||((id>>32)&0xfffff)!=1||uint32_t(id)==0)
+        throw std::runtime_error("Invalid Steam host identity");
 }
 Key derive(const Key& secret,const Key& client,const Key& host,const char* label) {
     std::array<unsigned char,64> salt{};std::copy(client.begin(),client.end(),salt.begin());std::copy(host.begin(),host.end(),salt.begin()+32);
@@ -45,16 +54,17 @@ std::vector<unsigned char> decode(const std::string& value) {
     if(encode(out)!=value)throw std::runtime_error("Noncanonical connection code");return out;
 }
 std::string invitation(const Invite& invite) {
-    address_check(invite.address);if(!invite.port)throw std::runtime_error("Invalid host port");
-    std::vector<unsigned char> data{'M','2',2,uint8_t(invite.address.size()),uint8_t(invite.port>>8),uint8_t(invite.port)};
-    data.insert(data.end(),invite.address.begin(),invite.address.end());data.insert(data.end(),invite.key.begin(),invite.key.end());return "MP2-"+encode(data);
+    if(invite.steam)steam_id_check(invite.address);else address_check(invite.address);if(!invite.port)throw std::runtime_error("Invalid host port");
+    std::vector<unsigned char> data{'M','2',uint8_t(invite.steam?3:2),uint8_t(invite.address.size()),uint8_t(invite.port>>8),uint8_t(invite.port)};
+    data.insert(data.end(),invite.address.begin(),invite.address.end());data.insert(data.end(),invite.key.begin(),invite.key.end());return std::string(invite.steam?"MP2S-":"MP2-")+encode(data);
 }
 Invite parse_invitation(const std::string& value) {
-    if(value.rfind("MP2-",0)!=0)throw std::runtime_error("Paste the full MP2 connection code");
-    auto bytes=decode(value.substr(4));
-    if(bytes.size()<39||bytes[0]!='M'||bytes[1]!='2'||bytes[2]!=2||bytes.size()!=size_t(bytes[3])+38)throw std::runtime_error("Invalid or incompatible connection code");
-    Invite invite;invite.address.assign(bytes.begin()+6,bytes.end()-32);invite.port=uint16_t(bytes[4])*256+bytes[5];
-    std::copy(bytes.end()-32,bytes.end(),invite.key.begin());address_check(invite.address);
+    bool steam=value.rfind("MP2S-",0)==0;
+    if(!steam&&value.rfind("MP2-",0)!=0)throw std::runtime_error("Paste the full MP2 connection code");
+    auto bytes=decode(value.substr(steam?5:4));
+    if(bytes.size()<39||bytes[0]!='M'||bytes[1]!='2'||bytes[2]!=(steam?3:2)||bytes.size()!=size_t(bytes[3])+38)throw std::runtime_error("Invalid or incompatible connection code");
+    Invite invite;invite.steam=steam;invite.address.assign(bytes.begin()+6,bytes.end()-32);invite.port=uint16_t(bytes[4])*256+bytes[5];
+    std::copy(bytes.end()-32,bytes.end(),invite.key.begin());if(steam)steam_id_check(invite.address);else address_check(invite.address);
     if(!invite.port)throw std::runtime_error("Invalid host port");return invite;
 }
 Channel::~Channel(){OPENSSL_cleanse(sending.data(),sending.size());OPENSSL_cleanse(receiving.data(),receiving.size());}

@@ -1,7 +1,7 @@
 #include "netplay.hpp"
 #include "netplay_crypto.hpp"
 #include "netplay_build.hpp"
-#include <rtc/rtc.hpp>
+#include "netplay_transport.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <chrono>
@@ -66,10 +66,10 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
     std::deque<std::function<void()>> tasks;
     std::thread worker;
     // Only the worker touches transports, membership and pending input records.
-    std::unique_ptr<rtc::WebSocketServer> listener;
+    std::unique_ptr<transport::Transport> wire;
     crypto::Invite invite;
     struct Connection {
-        std::shared_ptr<rtc::WebSocket> socket;
+        std::shared_ptr<transport::Socket> socket;
         crypto::Channel cipher;
         crypto::Key nonce{};
         bool encrypted{}, joined{};
@@ -105,11 +105,11 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
     }
     void send_connection(unsigned id,const json& message){
         auto it=connections.find(id);
-        if(it==connections.end()||!it->second->socket->isOpen()||!it->second->encrypted)throw std::runtime_error("A player disconnected");
+        if(it==connections.end()||!it->second->socket->is_open()||!it->second->encrypted)throw std::runtime_error("A player disconnected");
         auto& c=*it->second;
-        if(c.socket->bufferedAmount()>1024*1024)throw std::runtime_error("A player connection is not keeping up");
+        if(c.socket->buffered()>1024*1024)throw std::runtime_error("A player connection is not keeping up");
         auto sealed=c.cipher.seal(message.dump());
-        c.socket->send(reinterpret_cast<const std::byte*>(sealed.data()),sealed.size());
+        c.socket->send(transport::Binary(reinterpret_cast<const std::byte*>(sealed.data()),reinterpret_cast<const std::byte*>(sealed.data()+sealed.size())));
     }
     void send(int target,const json& message){send_connection(peer_ids[target],message);}
     void broadcast(const json& message){for(int i=1;i<4;++i)if(roster[i])send(i,message);}
@@ -117,13 +117,13 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
         json members=json::array();for(int i=0;i<4;++i)if(roster[i])members.push_back(i);
         broadcast({{"type","roster"},{"slots",members}});
         std::lock_guard lock(mutex);view.players=int(members.size());
-        for(int i=0;i<4;++i){view.ready[i]=roster[i];view.routes[i]=roster[i]&&i!=slot?"Direct":"";}
+        for(int i=0;i<4;++i){view.ready[i]=roster[i];view.routes[i]=roster[i]&&i!=slot?(options.transport==Transport::Steam?"Steam P2P":"Direct"):"";}
         changed.notify_all();
     }
     void disconnect(unsigned id){
         auto it=connections.find(id);if(it==connections.end())return;
         int remote=it->second->slot;
-        it->second->socket->resetCallbacks();it->second->socket->close();connections.erase(it);
+        it->second->socket->reset_callbacks();it->second->socket->close();connections.erase(it);
         if(!hosting){fail("Host disconnected. Create or join a new room.");return;}
         if(remote<0)return;
         if(running){
@@ -132,28 +132,25 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
             fail("A player disconnected. Session stopped.");
         }else{roster[remote]=false;peer_ids[remote]=0;publish_roster();}
     }
-    void attach(std::shared_ptr<rtc::WebSocket> socket){
+    void attach(std::shared_ptr<transport::Socket> socket){
         if(connections.size()>=16 || (hosting&&running)){socket->close();return;}
         unsigned id=next_connection++;
         auto c=std::make_unique<Connection>();c->socket=socket;
         connections.emplace(id,std::move(c));
-        socket->onMessage(callback([id](State& s,rtc::message_variant raw){
+        socket->on_message=callback([id](State& s,transport::Message raw){
             try{s.receive(id,raw);}catch(const std::exception&){s.disconnect(id);}
-        }));
-        socket->onClosed(callback([id](State& s){s.disconnect(id);}));
-        socket->onError(callback([id](State& s,std::string){s.disconnect(id);}));
+        });
+        socket->on_close=callback([id](State& s){s.disconnect(id);});
         if(!hosting){
             peer_ids[0]=id;
-            socket->onOpen(callback([id](State& s){
+            socket->on_open=callback([id](State& s){
                 auto& c=*s.connections.at(id);c.nonce=crypto::random_key();
                 c.socket->send(json({{"type","hello"},{"nonce",crypto::encode(c.nonce)}}).dump());
-            }));
-            std::string host=sanitize_host(invite.address);
-            socket->open("ws://"+host+":"+std::to_string(invite.port)+"/mp2");
+            });
+            socket->open(invite.address,invite.port);
         }
     }
-    static std::string sanitize_host(const std::string& address){return address.find(':')==std::string::npos?address:"["+address+"]";}
-    void receive(unsigned id,const rtc::message_variant& raw){
+    void receive(unsigned id,const transport::Message& raw){
         auto it=connections.find(id);if(it==connections.end())return;
         auto& c=*it->second;
         if(!c.encrypted){
@@ -174,8 +171,8 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
             }
             return;
         }
-        if(!std::holds_alternative<rtc::binary>(raw))throw std::runtime_error("Unencrypted peer message");
-        const auto& data=std::get<rtc::binary>(raw);
+        if(!std::holds_alternative<transport::Binary>(raw))throw std::runtime_error("Unencrypted peer message");
+        const auto& data=std::get<transport::Binary>(raw);
         auto j=json::parse(c.cipher.open({reinterpret_cast<const unsigned char*>(data.data()),data.size()}));
         auto type=j.at("type").get<std::string>();
         if(type=="join"&&hosting&&!c.joined){
@@ -192,7 +189,7 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
             roster.fill(false);for(auto& p:j.at("slots"))roster[integer(p,0,3)]=true;
             if(!roster[0]||slot<0||!roster[slot])throw std::runtime_error("Invalid room membership");
             std::lock_guard lock(mutex);view.players=int(std::count(roster.begin(),roster.end(),true));
-            for(int i=0;i<4;++i){view.ready[i]=roster[i];view.routes[i]=roster[i]&&i!=slot?"Direct":"";}
+            for(int i=0;i<4;++i){view.ready[i]=roster[i];view.routes[i]=roster[i]&&i!=slot?(options.transport==Transport::Steam?"Steam P2P":"Direct"):"";}
             changed.notify_all();
         }else if(type=="start"&&!hosting&&c.joined){begin(j);}
         else if(type=="error"&&!hosting){fail(j.at("message").get<std::string>());}
@@ -259,50 +256,52 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
     void run(){
         try{
             hosting=options.code.empty();
+            wire=options.transport==Transport::Steam?transport::steam():transport::direct();
             if(hosting){
-                invite={options.address,options.port,crypto::random_key()};
-                rtc::WebSocketServerConfiguration cfg;cfg.bindAddress=options.address.find(':')==std::string::npos?"0.0.0.0":"::";cfg.port=options.port;cfg.maxMessageSize=32768;cfg.connectionTimeout=5s;
-                listener=std::make_unique<rtc::WebSocketServer>(cfg);invite.port=listener->port();
+                invite={wire->host_address(options.address),options.port,crypto::random_key(),options.transport==Transport::Steam};
+                invite.port=wire->listen(options.address,options.port,callback([](State& s,std::shared_ptr<transport::Socket> socket){s.attach(std::move(socket));}));
                 auto code=crypto::invitation(invite);
-                listener->onClient(callback([](State& s,std::shared_ptr<rtc::WebSocket> socket){s.attach(std::move(socket));}));
                 slot=0;roster[0]=true;
                 std::lock_guard lock(mutex);view.connected=true;view.slot=0;view.players=1;view.ready[0]=true;view.code=code;
-                view.message="Share the code. Forward TCP port "+std::to_string(invite.port)+" for internet play.";
+                view.message=options.transport==Transport::Steam?"Steam room ready (App ID 480). Share the code; no port forwarding needed.":"Share the code. Forward TCP port "+std::to_string(invite.port)+" for internet play.";
                 fprintf(stderr,"[NETPLAY] connection code %s\n",code.c_str());changed.notify_all();
             }else{
                 invite=crypto::parse_invitation(options.code);
-                rtc::WebSocketConfiguration cfg;cfg.connectionTimeout=10s;cfg.maxMessageSize=32768;
-                attach(std::make_shared<rtc::WebSocket>(cfg));
+                attach(wire->socket());
             }
         }catch(const std::exception& e){fail(e.what());}
         for(;;){
             std::function<void()> task;
             {
-                std::unique_lock lock(mutex);changed.wait_for(lock,1s,[&]{return stopping||!tasks.empty();});
+                std::unique_lock lock(mutex);changed.wait_for(lock,5ms,[&]{return stopping||!tasks.empty();});
                 if(stopping)break;
                 if(!tasks.empty()){task=std::move(tasks.front());tasks.pop_front();}
-                else if(!view.connected&&!view.failed&&std::chrono::steady_clock::now()-connect_started>15s){lock.unlock();fail("Could not reach host. Check the address and TCP port forwarding.");continue;}
+                else if(!view.connected&&!view.failed&&std::chrono::steady_clock::now()-connect_started>30s){lock.unlock();fail(options.transport==Transport::Steam?"Could not reach Steam host. Check Steam is online and the room code is current.":"Could not reach host. Check the address and TCP port forwarding.");continue;}
             }
             try{
                 if(task)task();
+                if(wire)wire->poll();
                 std::vector<unsigned> expired;
                 for(auto& [id,c]:connections)if(!c->joined&&std::chrono::steady_clock::now()-c->created>10s)expired.push_back(id);
                 for(auto id:expired)disconnect(id);
             }catch(const std::exception& e){fail(e.what());}
         }
         {std::lock_guard lock(mutex);tasks.clear();}
-        if(listener){listener->onClient(nullptr);listener->stop();listener.reset();}
-        for(auto& [id,c]:connections){c->socket->resetCallbacks();c->socket->close();}
+        for(auto& [id,c]:connections){c->socket->reset_callbacks();c->socket->close();}
         connections.clear();
+        wire.reset();
     }
 };
 void validate_options(const Options& options){
-    if(options.code.empty())crypto::invitation({options.address,options.port?options.port:uint16_t(1),{}});
+    if(options.code.empty()&&options.transport==Transport::Direct)crypto::invitation({options.address,options.port?options.port:uint16_t(1),{}});
+    else if(options.code.empty())return;
     else crypto::parse_invitation(options.code);
 }
 Session::Session(const Options& options):state(std::make_shared<State>()){
     validate_options(options);
-    state->options=options;state->view.message="Connecting directly to host...";
+    state->options=options;
+    if(!options.code.empty())state->options.transport=crypto::parse_invitation(options.code).steam?Transport::Steam:Transport::Direct;
+    state->view.message=state->options.transport==Transport::Steam?"Connecting through Steam (App ID 480)...":"Connecting directly to host...";
     state->worker=std::thread([s=state]{s->run();});
 }
 Session::~Session(){close();}

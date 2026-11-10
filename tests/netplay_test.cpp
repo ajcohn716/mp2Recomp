@@ -16,13 +16,27 @@ void crypto_checks() {
     using namespace netplay::crypto;
     auto secret=random_key(), client=random_key(), host=random_key();
     auto code=invitation({"127.0.0.1",7777,secret});auto invite=parse_invitation(code);
-    netplay::validate_options({"127.0.0.1",7777,""});
+    netplay::validate_options({"127.0.0.1",7777,"",true,netplay::Transport::Direct});
     netplay::validate_options({"127.0.0.1",7777,code});
     require(invite.key==secret && invite.address=="127.0.0.1" && invite.port==7777,"Invitation round trip");
     for(const auto& invalid:{std::string("garbage"),code+"=",std::string("MP2-A")}) {
         bool rejected=false;try{parse_invitation(invalid);}catch(...){rejected=true;}require(rejected,"Malformed code accepted");
         rejected=false;try{netplay::validate_options({"127.0.0.1",7777,invalid});}catch(...){rejected=true;}
         require(rejected,"Invalid code accepted before game restart");
+    }
+    auto steam_code=invitation({"76561198000000001",1,secret,true});
+    auto steam_invite=parse_invitation(steam_code);
+    require(steam_code.starts_with("MP2S-")&&steam_invite.steam&&steam_invite.key==secret&&
+            steam_invite.address=="76561198000000001","Steam invitation round trip");
+    netplay::validate_options({.code=steam_code});
+    netplay::validate_options({.address="",.port=0}); // Steam needs no IP or forwarded port.
+    for(const auto& invalid:{std::string("0"),std::string("127.0.0.1"),std::string("76561198000000001junk"),std::string("076561198000000001")}) {
+        bool rejected=false;try{invitation({invalid,1,secret,true});}catch(...){rejected=true;}
+        require(rejected,"Invalid Steam identity accepted");
+    }
+    for(const auto& invalid:{"MP2-"+steam_code.substr(5),"MP2S-"+code.substr(4),steam_code+"="}) {
+        bool rejected=false;try{parse_invitation(invalid);}catch(...){rejected=true;}
+        require(rejected,"Cross-transport or malformed Steam code accepted");
     }
     Channel sender,receiver;sender.initialize(secret,client,host,false);receiver.initialize(secret,client,host,true);
     auto record=sender.seal("controller inputs");require(receiver.open(record)=="controller inputs","Encryption round trip");
@@ -34,7 +48,7 @@ void crypto_checks() {
 }
 int main() try {
     crypto_checks();
-    netplay::Session host({"127.0.0.1",0,""});
+    netplay::Session host({"127.0.0.1",0,"",true,netplay::Transport::Direct});
     wait([&]{auto s=host.status();if(s.failed)throw std::runtime_error(s.message);return s.connected;});
     auto code=host.status().code;
     {
@@ -81,7 +95,7 @@ int main() try {
     for(auto& f:faults)require(f.get(),"Desynchronization did not stop all clients");
     std::cout<<"PASS: injected desynchronization stops every peer\n";
     {
-        netplay::Session next_host({"127.0.0.1",0,""});wait([&]{return next_host.status().connected;});
+        netplay::Session next_host({"127.0.0.1",0,"",true,netplay::Transport::Direct});wait([&]{return next_host.status().connected;});
         auto guest=std::make_unique<netplay::Session>(netplay::Options{"127.0.0.1",0,next_host.status().code});
         wait([&]{return guest->status().connected && next_host.status().players==2;});
         guest.reset();wait([&]{return next_host.status().players==1;});

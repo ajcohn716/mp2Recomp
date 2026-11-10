@@ -70,6 +70,7 @@ add_library(mp2_code STATIC ${RECOMP_SOURCES})
 target_include_directories(mp2_code PUBLIC N64Recomp/include ${RECOMP_HEADERS} runtime/librecomp/include runtime/ultramodern/include runtime/thirdparty/concurrentqueue)
 target_compile_options(mp2_code PRIVATE -fno-strict-aliasing -ffp-contract=off -Wno-implicit-function-declaration)
 add_executable(mp2recomp src/debug_state.cpp src/debug.cpp src/debug_renderer.cpp src/main.cpp src/settings.cpp src/renderer.cpp src/process.cpp src/overlays.cpp src/platform.cpp src/self_test.cpp src/netplay_game.cpp src/netplay_lobby.cpp ${RSP_SOURCE})
+mp2_copy_steam_runtime(mp2recomp)
 target_include_directories(mp2recomp PRIVATE
     N64Recomp/include ${RECOMP_HEADERS}
     rt64/src rt64/src/contrib rt64/src/contrib/plume rt64/src/contrib/hlslpp/include

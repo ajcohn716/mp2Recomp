@@ -13,6 +13,7 @@ struct Invite {
     std::string address;
     uint16_t port{};
     Key key{};
+    bool steam{};
 };
 std::string invitation(const Invite&);
 Invite parse_invitation(const std::string&);
