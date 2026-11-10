@@ -28,7 +28,7 @@ def main():
         python=stage/'python/python.exe'
     else:
         packed=args.output/'conda-environment.tar.gz'
-        subprocess.run([str(args.python),'-m','conda_pack','-p',str(args.toolchain),'-o',str(packed),'--force'],check=True)
+        subprocess.run([str(args.python),'-m','conda_pack.cli','-p',str(args.toolchain),'-o',str(packed),'--force'],check=True)
         (stage/'toolchain').mkdir(exist_ok=True)
         with tarfile.open(packed) as archive:archive.extractall(stage/'toolchain',filter='data')
         packed.unlink()
