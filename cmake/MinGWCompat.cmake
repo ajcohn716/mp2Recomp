@@ -19,3 +19,12 @@ foreach(SOURCE IN LISTS PLUME_SOURCES)
     endif()
 endforeach()
 set_property(TARGET plume PROPERTY SOURCES "${PLUME_COMPAT_SOURCES}")
+
+# Windows uses LLP64, but Clang still provides the 64-bit trailing-zero builtin.
+file(READ "${CMAKE_SOURCE_DIR}/rt64/src/common/rt64_tmem_hasher.h" HASHER_TEXT)
+string(REPLACE "defined(__GNUC__) && (__GNUC__ >= 4) && defined(__LP64__)"
+    "defined(__GNUC__) && (__GNUC__ >= 4) && (defined(__LP64__) || defined(_WIN64))"
+    HASHER_TEXT "${HASHER_TEXT}")
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/rt64_compat/common")
+file(WRITE "${CMAKE_BINARY_DIR}/rt64_compat/common/rt64_tmem_hasher.h" "${HASHER_TEXT}")
+target_include_directories(rt64 BEFORE PUBLIC "${CMAKE_BINARY_DIR}/rt64_compat")
