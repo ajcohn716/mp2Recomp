@@ -179,7 +179,13 @@ int main(int argc, char** argv) try {
         else if (argument == "--netplay" || argument == "--host") multiplayer = true;
         else if (argument == "--netplay-connect") { multiplayer = true; connect_immediately = true; }
         else if (argument == "--join") { multiplayer = true; network.code = value(); }
-        else if (argument == "--host-address") { network.address = value(); network.detect_public_ip = false; }
+        else if (argument == "--host-address") { network.address = value(); network.detect_public_ip = false; network.transport = netplay::Transport::Direct; }
+        else if (argument == "--netplay-transport") {
+            std::string_view transport=value();
+            if(transport=="steam")network.transport=netplay::Transport::Steam;
+            else if(transport=="direct")network.transport=netplay::Transport::Direct;
+            else throw std::runtime_error("Netplay transport must be steam or direct");
+        }
         else if (argument == "--host-port") { auto port = std::stoul(value()); if (port == 0 || port > 65535) throw std::runtime_error("Host port must be 1..65535"); network.port = uint16_t(port); }
         else if (argument == "--data-dir") data_directory = value();
         else if (argument == "--netplay-trace") trace = value();
@@ -305,7 +311,7 @@ int main(int argc, char** argv) try {
         std::vector<std::string> arguments{executable.string(),"--rom",std::filesystem::absolute(rom).string(),
             "--data-dir",std::filesystem::absolute(data_directory).string()};
         if(requested_room) {
-            arguments.insert(arguments.end(),{"--netplay-connect","--host-address",requested_room->address,"--host-port",std::to_string(requested_room->port)});
+            arguments.insert(arguments.end(),{"--netplay-connect","--host-address",requested_room->address,"--host-port",std::to_string(requested_room->port),"--netplay-transport",requested_room->transport==netplay::Transport::Steam?"steam":"direct"});
             if(!requested_room->code.empty()){arguments.push_back("--join");arguments.push_back(requested_room->code);}
         } else arguments.insert(arguments.end(),{"--debug-checkpoints","--debug-load",load_state.string()});
         if(headless)arguments.push_back("--headless");

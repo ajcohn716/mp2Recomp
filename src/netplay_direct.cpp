@@ -54,7 +54,10 @@ struct DirectSocket final : Socket, std::enable_shared_from_this<DirectSocket> {
 struct Direct final : Transport {
     std::unique_ptr<rtc::WebSocketServer> listener;
     std::shared_ptr<Events> events=std::make_shared<Events>();
-    ~Direct() override {if(listener){listener->onClient(nullptr);listener->stop();}}
+    ~Direct() override {
+        if(listener){listener->onClient(nullptr);listener->stop();listener.reset();}
+        std::lock_guard lock(events->mutex);events->pending.clear();
+    }
     uint16_t listen(const std::string& address,uint16_t port,std::function<void(std::shared_ptr<Socket>)> accept) override {
         rtc::WebSocketServerConfiguration cfg;
         cfg.bindAddress=address.find(':')==std::string::npos?"0.0.0.0":"::";

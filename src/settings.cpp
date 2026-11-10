@@ -181,15 +181,22 @@ void draw() {
         bool connected=room_active();
         if(!connected) {
             text(24,130,network_actions.lobby?"Create a room or join a friend before starting the game.":"Creating or joining restarts the game into the room lobby.");
-            text(24,176,"Host's public IP / DNS name");text(640,176,"TCP port");
-            field_box(0,24,204,592,34,network.address);field_box(1,640,204,130,34,port);
+            bool steam=network.transport==netplay::Transport::Steam;
+            button(24,154,350,steam?"Transport: Steam (App ID 480)  >":"Transport: Direct TCP  >");
+            if(steam) {
+                text(24,204,"Sign into Steam. Friends join using their own Steam accounts.");
+                text(24,230,"Create a room and share its code. No port forwarding required.");
+            } else {
+                text(24,182,"Host's public IP / DNS name");text(640,182,"TCP port");
+                field_box(0,24,204,592,34,network.address);field_box(1,640,204,130,34,port);
+            }
             button(24,254,190,"Create room");
-            button(236,254,190,public_ip.valid()?"Looking up IP...":"Detect public IP");
-            clipped_text(24,286,746,lookup_status);
+            if(!steam){button(236,254,190,public_ip.valid()?"Looking up IP...":"Detect public IP");
+                clipped_text(24,286,746,lookup_status);}
             text(24,320,"Join with a connection code");field_box(2,24,352,746,90,network.code);
             button(24,458,190,"Join room");
-            text(24,522,"Host: forward the TCP port above to this computer.");
-            text(24,552,"Use your LAN IP for local play. Friends only need the code.");
+            text(24,522,steam?"No IP lookup or router port forwarding is needed.":"Host: forward the TCP port above to this computer.");
+            text(24,552,steam?"Share the MP2S code privately, then start when everyone joins.":"Use your LAN IP for local play. Friends only need the code.");
             text(24,582,"Tab changes fields. Ctrl+A clears. Ctrl+V pastes.");
         } else {
             text(24,130,room.running?"Netplay session in progress":"Room lobby  /  Up to four players");
@@ -198,6 +205,7 @@ void draw() {
             for(int p=0;p<4;++p) {
                 std::string line="Player "+std::to_string(p+1)+(room.slot==p?" (you)":"");
                 line+="   ";line+=room.ready[p]?"Connected":"Waiting";
+                if(!room.routes[p].empty())line+="  /  "+room.routes[p];
                 text(24,366+p*38,line,room.ready[p]?SDL_Color{132,218,179,255}:SDL_Color{169,183,204,255});
             }
             if(network_actions.lobby) {
@@ -220,12 +228,14 @@ void connect(bool host) {
     try {
         if(!network_actions.connect)throw std::runtime_error("Netplay is unavailable in this mode.");
         auto options=network;
-        if(host) {
+        if(host&&options.transport==netplay::Transport::Direct) {
             size_t used{};auto number=std::stoul(port,&used);
             if(used!=port.size()||!number||number>65535)throw std::runtime_error("Port must be 1..65535");
             if(options.address.empty())throw std::runtime_error("Enter the host's IP or DNS name.");
             options.port=uint16_t(number);options.code.clear();
-        } else if(options.code.empty())throw std::runtime_error("Paste the full connection code first.");
+        }
+        if(host)options.code.clear();
+        else if(options.code.empty())throw std::runtime_error("Paste the full connection code first.");
         network_actions.connect(options);
         if(network_actions.status)room=network_actions.status();
         field=-1;text_input();status.clear();
@@ -299,7 +309,7 @@ bool event(const SDL_Event& e) {
         if(key==SDL_SCANCODE_ESCAPE){if(capture>=0){capture=-1;dirty=true;}else toggle();}
         else if(capture>=0&&!capture_pad){bindings[capture].key=key;capture=-1;save();}
         else if(page==Page::Netplay&&!room_active()) {
-            if(key==SDL_SCANCODE_TAB){field=(field+1)%3;text_input();}
+            if(key==SDL_SCANCODE_TAB){field=network.transport==netplay::Transport::Steam?2:(field+1)%3;text_input();}
             else if(field>=0) {
                 auto& target=field==0?network.address:field==1?port:network.code;
                 bool ctrl=(e.key.keysym.mod&(KMOD_CTRL|KMOD_GUI))!=0;
@@ -348,11 +358,17 @@ bool event(const SDL_Event& e) {
             if(changed){set_graphics(g);save();}
         } else {
             if(!room_active()) {
-                if(hit(x,y,24,204,592,34))field=0;
-                if(hit(x,y,640,204,130,34))field=1;
+                if(hit(x,y,24,154,350,26)) {
+                    network.transport=network.transport==netplay::Transport::Steam?netplay::Transport::Direct:netplay::Transport::Steam;
+                    field=-1;status.clear();
+                }
+                if(network.transport==netplay::Transport::Direct) {
+                    if(hit(x,y,24,204,592,34))field=0;
+                    if(hit(x,y,640,204,130,34))field=1;
+                }
                 if(hit(x,y,24,352,746,90))field=2;
                 if(hit(x,y,24,254,190,26))connect(true);
-                if(hit(x,y,236,254,190,26))detect_public_ip();
+                if(network.transport==netplay::Transport::Direct&&hit(x,y,236,254,190,26))detect_public_ip();
                 if(hit(x,y,24,458,190,26))connect(false);
                 text_input();dirty=true;
             } else {
@@ -390,13 +406,13 @@ void update(uint16_t& b,float& x,float& y) {
             if(public_ip.valid()&&public_ip.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
                 std::string address;
                 try {address=public_ip.get();}catch(...){}
-                if(lookup_revision==address_revision&&!room_active()) {
+                if(network.transport==netplay::Transport::Direct&&lookup_revision==address_revision&&!room_active()) {
                     if(!address.empty()) {network.address=address;lookup_status="Public IPv4 detected. Port forwarding is still required.";}
                     else lookup_status="Could not detect public IP. Enter it manually or retry.";
                 }
                 dirty=true;
             }
-            if(!lookup_attempted&&!room_active()&&network_actions.connect&&network.detect_public_ip&&network.code.empty()&&network.address=="127.0.0.1")detect_public_ip();
+            if(network.transport==netplay::Transport::Direct&&!lookup_attempted&&!room_active()&&network_actions.connect&&network.detect_public_ip&&network.code.empty()&&network.address=="127.0.0.1")detect_public_ip();
         }
         static Uint32 last_poll{};
         if(page==Page::Netplay&&network_actions.status&&SDL_GetTicks()-last_poll>=100){room=network_actions.status();dirty=true;last_poll=SDL_GetTicks();}

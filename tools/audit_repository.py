@@ -26,6 +26,7 @@ ALLOWED = {
     "src/public_ip.cpp",
     "tests/public_ip_test.cpp",
     "tests/netplay_test.cpp",
+    "tests/netplay_steam_test.cpp",
     "tools/test_game_netplay.py",
     "docs/netplay.md",
 

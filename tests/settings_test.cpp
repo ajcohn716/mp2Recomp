@@ -35,7 +35,13 @@ int main(int argc,char**argv){
  click(240,90);click(40,690);assert(settings::gain(0)==1);assert(settings::graphics()==g);
  click(380,190);assert(std::abs(settings::gain(0)-.5f)<.01);
  std::optional<netplay::Options> request;
- settings::set_netplay({.connect=[&](const auto& o){request=o;}},{.detect_public_ip=false});
+ // Default Steam room creation needs neither IP detection nor a valid TCP port.
+ settings::set_netplay({.connect=[&](const auto& o){request=o;}});
+ click(620,90);settings::update(b,x,y);assert(lookup_calls==0);
+ click(40,264);assert(request&&request->transport==netplay::Transport::Steam);request.reset();
+ // Switch to Direct TCP and retain its validation and address lookup behavior.
+ click(40,164);click(40,264);assert(request&&request->transport==netplay::Transport::Direct);request.reset();
+ settings::set_netplay({.connect=[&](const auto& o){request=o;}},{.detect_public_ip=false,.transport=netplay::Transport::Direct});
  click(620,90);click(650,215);key(SDL_SCANCODE_A,KMOD_CTRL);type("0");click(40,264);assert(!request);
  click(650,215);key(SDL_SCANCODE_A,KMOD_CTRL);type("17778");click(40,264);
  assert(request&&request->address=="127.0.0.1"&&request->port==17778&&request->code.empty());request.reset();
@@ -44,7 +50,7 @@ int main(int argc,char**argv){
  // Public-IP work must not block the UI, replace an edit, or ignore explicit CLI addresses.
  auto tick=[&]{settings::update(b,x,y);};
  auto wait=[&](auto ready){auto end=SDL_GetTicks()+2000;while(!ready()){assert(SDL_GetTicks()<end);tick();SDL_Delay(1);}};
- auto setup=[&](netplay::Options initial=netplay::Options{}){request.reset();settings::set_netplay({.connect=[&](const auto& o){request=o;}},initial);tick();};
+ auto setup=[&](netplay::Options initial=netplay::Options{.transport=netplay::Transport::Direct}){request.reset();settings::set_netplay({.connect=[&](const auto& o){request=o;}},initial);tick();};
  auto host_address=[&]{click(40,264);assert(request);return request->address;};
  auto expect_address=[&](const char* address){wait([&]{return host_address()==address;});};
  auto started=SDL_GetTicks();setup();assert(SDL_GetTicks()-started<500);wait([&]{return lookup_calls==1;});
@@ -59,10 +65,10 @@ int main(int argc,char**argv){
  wait([&]{tick();click(250,264);return lookup_calls==3;});
  assert(host_address()=="192.168.1.42");
  lookup_result.set_value("93.184.216.36");expect_address("93.184.216.36");
- setup({.address="127.0.0.1",.detect_public_ip=false});for(int i=0;i<3;++i)tick();
+ setup({.address="127.0.0.1",.detect_public_ip=false,.transport=netplay::Transport::Direct});for(int i=0;i<3;++i)tick();
  assert(lookup_calls==3&&host_address()=="127.0.0.1");
- setup({.address="my-host.example"});for(int i=0;i<3;++i)tick();assert(lookup_calls==3&&host_address()=="my-host.example");
- setup({.code="MP2-test-code"});for(int i=0;i<3;++i)tick();assert(lookup_calls==3);
+ setup({.address="my-host.example",.transport=netplay::Transport::Direct});for(int i=0;i<3;++i)tick();assert(lookup_calls==3&&host_address()=="my-host.example");
+ setup({.code="MP2-test-code",.transport=netplay::Transport::Direct});for(int i=0;i<3;++i)tick();assert(lookup_calls==3);
  lookup_result=std::promise<std::string>{};setup();wait([&]{return lookup_calls==4;});
  lookup_result.set_value("");lookup_result=std::promise<std::string>{};
  wait([&]{tick();click(250,264);return lookup_calls==5;});assert(host_address()=="127.0.0.1");

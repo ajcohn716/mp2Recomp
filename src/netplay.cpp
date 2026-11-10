@@ -282,7 +282,7 @@ struct Session::State : std::enable_shared_from_this<Session::State> {
                 if(task)task();
                 if(wire)wire->poll();
                 std::vector<unsigned> expired;
-                for(auto& [id,c]:connections)if(!c->joined&&std::chrono::steady_clock::now()-c->created>10s)expired.push_back(id);
+                for(auto& [id,c]:connections)if(!c->joined&&std::chrono::steady_clock::now()-c->created>(options.transport==Transport::Steam?30s:10s))expired.push_back(id);
                 for(auto id:expired)disconnect(id);
             }catch(const std::exception& e){fail(e.what());}
         }
