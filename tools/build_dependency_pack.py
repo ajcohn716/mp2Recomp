@@ -67,14 +67,14 @@ def main():
         flags='--gcc-toolchain='+str(args.toolchain)+' --sysroot='+str(sysroot)
         compiler_flags=['-DCMAKE_C_FLAGS='+flags,'-DCMAKE_CXX_FLAGS='+flags]
     cmake=str(args.toolchain/('bin/cmake'+suffix))
-    subprocess.run([cmake,'-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
+    subprocess.run([cmake,'--fresh','-S',str(ROOT/'N64Recomp'),'-B',str(build),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
     subprocess.run([str(args.toolchain/('bin/cmake'+suffix)),'--build',str(build),'--target','N64RecompCLI','RSPRecomp','-j',args.jobs],env=env,check=True)
     (stage/'tools').mkdir(exist_ok=True)
     for tool in ('N64Recomp','RSPRecomp'):shutil.copy2(build/(tool+suffix),stage/'tools'/(tool+suffix))
     # A dependency pack is publishable only after compiling and running the
     # complete host runtime with synthetic (non-game) link fixtures.
     check=ROOT/'build/sdk-platform-check'
-    subprocess.run([cmake,'-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
+    subprocess.run([cmake,'--fresh','-S',str(ROOT),'-B',str(check),'-G','Ninja','-DMP2_PORTABILITY_CHECK=ON',
         '-DCMAKE_POLICY_VERSION_MINIMUM=3.5','-DCMAKE_BUILD_TYPE=Release',
         '-DCMAKE_C_COMPILER='+str(args.toolchain/('bin/clang'+suffix)),'-DCMAKE_CXX_COMPILER='+str(args.toolchain/('bin/clang++'+suffix)),*compiler_flags],env=env,check=True)
     subprocess.run([cmake,'--build',str(check),'--target','mp2recomp','-j',args.jobs],env=env,check=True)
