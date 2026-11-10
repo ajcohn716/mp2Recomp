@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(SDL2 REQUIRED)
 find_package(Threads REQUIRED)
+add_executable(renderer_patch_test tests/renderer_patch_test.cpp)
+target_include_directories(renderer_patch_test PRIVATE src)
 option(MP2_NETPLAY_ONLY "Build networking integration tests without the game/renderer" OFF)
 include(cmake/Netplay.cmake)
 if(MP2_NETPLAY_ONLY)
@@ -61,11 +63,12 @@ endif()
 add_library(mp2_code STATIC ${RECOMP_SOURCES})
 target_include_directories(mp2_code PUBLIC N64Recomp/include ${RECOMP_HEADERS} runtime/librecomp/include runtime/ultramodern/include runtime/thirdparty/concurrentqueue)
 target_compile_options(mp2_code PRIVATE -fno-strict-aliasing -ffp-contract=off -Wno-implicit-function-declaration)
-add_executable(mp2recomp src/main.cpp src/settings.cpp src/renderer.cpp src/process.cpp src/overlays.cpp src/platform.cpp src/self_test.cpp src/netplay_game.cpp src/netplay_lobby.cpp ${RSP_SOURCE})
+add_executable(mp2recomp src/debug_state.cpp src/debug.cpp src/debug_renderer.cpp src/main.cpp src/settings.cpp src/renderer.cpp src/process.cpp src/overlays.cpp src/platform.cpp src/self_test.cpp src/netplay_game.cpp src/netplay_lobby.cpp ${RSP_SOURCE})
 target_include_directories(mp2recomp PRIVATE
     N64Recomp/include ${RECOMP_HEADERS}
     rt64/src rt64/src/contrib rt64/src/contrib/plume rt64/src/contrib/hlslpp/include
-    rt64/src/contrib/mupen64plus-core/src/api rt64/src/contrib/imgui)
+    rt64/src/contrib/mupen64plus-core/src/api rt64/src/contrib/imgui
+    rt64/src/contrib/plume/contrib/VulkanMemoryAllocator/include)
 target_compile_definitions(mp2recomp PRIVATE HLSL_CPU SDL_MAIN_HANDLED RT64_SDL_WINDOW_VULKAN PLUME_SDL_VULKAN_ENABLED)
 target_link_libraries(mp2recomp PRIVATE mp2_netplay mp2_code librecomp ultramodern rt64 SDL2::SDL2 Threads::Threads ${CMAKE_DL_LIBS})
 target_compile_options(mp2recomp PRIVATE -fno-strict-aliasing)

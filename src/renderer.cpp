@@ -1,5 +1,11 @@
 #include <memory>
 #include "settings.hpp"
+#include "debug.hpp"
+#include "debug_state.hpp"
+#include "debug_renderer.hpp"
+#include "render_patches.hpp"
+#include "gbi/rt64_gbi_rdp.h"
+#include "hle/rt64_rdp.h"
 #include "hle/rt64_application.h"
 #include "hle/rt64_rsp.h"
 #include "ultramodern/ultramodern.hpp"
@@ -8,6 +14,29 @@ namespace {
 uint8_t dmem_gfx[4096]{}, imem_gfx[4096]{}, header[64]{};
 uint32_t mi{}, dpc[8]{};
 void check_interrupts() {}
+void aligned_texrect(RT64::State* state,RT64::DisplayList** dl) {
+    std::array<RT64::DisplayList,3> commands{(*dl)[0],(*dl)[1],(*dl)[2]};
+    const auto& rdp=*state->rdp;
+    const auto& scissor=rdp.scissorRectStack[rdp.scissorStackSize-1];
+    if(mp2::align_background_tile(commands[0].w0,commands[0].w1,commands[2].w1,
+        rdp.otherMode.cycleType()==G_CYC_1CYCLE,rdp.colorImage.width,rdp.colorImage.siz,
+        {scissor.ulx,scissor.uly,scissor.lrx,scissor.lry})) {
+        auto* local=commands.data();RT64::GBI_RDP::texrect(state,&local);*dl+=2;
+    } else RT64::GBI_RDP::texrect(state,dl);
+}
+std::array<RT64::GBIFunction,256> trace_functions;
+mp2::debug::Json trace_commands;
+void trace_command(RT64::State* state,RT64::DisplayList** dl) {
+    const auto& command=**dl;unsigned op=command.w0>>24;
+    if(trace_commands.size()<16384) {
+        const auto& scissor=state->rdp->scissorRectStack[state->rdp->scissorStackSize-1];
+        trace_commands.push_back({{"address",uint32_t(reinterpret_cast<uint8_t*>(*dl)-state->RDRAM)},
+            {"w0",command.w0},{"w1",command.w1},{"color_image",state->rdp->colorImage.address},
+            {"cycle",state->rdp->otherMode.cycleType()},
+            {"scissor_q2",{scissor.ulx,scissor.uly,scissor.lrx,scissor.lry}}});
+    }
+    trace_functions[op](state,dl);
+}
 
 class MP2Renderer final : public ultramodern::renderer::RendererContext {
     std::unique_ptr<RT64::Application> app;
@@ -66,7 +95,8 @@ public:
         setup_result = static_cast<ultramodern::renderer::SetupResult>(result);
         chosen_api = ultramodern::renderer::GraphicsApi::Vulkan;
         fprintf(stderr, "[MP2] RT64 setup result: %d\n", int(result));
-        if (result != RT64::Application::SetupResult::Success) app.reset();
+        if (result != RT64::Application::SetupResult::Success) { app.reset(); mp2::debug::clear_render_hooks(); }
+        else { mp2::debug::install_render_hooks(app.get()); const auto& device=app->device->getDescription();mp2::debug::event("graphics_device",{{"name",device.name},{"driver",device.driverVersion}}); }
     }
     bool valid() override { return app != nullptr; }
     bool update_config(const ultramodern::renderer::GraphicsConfig&, const ultramodern::renderer::GraphicsConfig&) override { return false; }
@@ -77,11 +107,41 @@ public:
         if (++count <= 5 || count % 300 == 0) fprintf(stderr, "[MP2] graphics task %u, dl=%08x\n", count, task->t.data_ptr);
         app->state->rsp->reset();
         app->interpreter->loadUCodeGBI(task->t.ucode & 0x3FFFFFF, task->t.ucode_data & 0x3FFFFFF, true);
+        // Patch the host interpreter, never guest command memory or generated C.
+        auto* task_gbi=app->interpreter->hleGBI;
+        if(task_gbi->map[0xE4]==RT64::GBI_RDP::texrect)task_gbi->map[0xE4]=aligned_texrect;
+        std::filesystem::path trace_path;
+        bool tracing=mp2::debug::next_trace(trace_path);
+        auto* gbi=app->interpreter->hleGBI;
+        if(tracing) {
+            trace_commands=mp2::debug::Json::array();
+            for(unsigned op=0;op<256;++op){trace_functions[op]=gbi->map[op];if(gbi->map[op])gbi->map[op]=trace_command;}
+        }
         app->processDisplayLists(app->core.RDRAM, task->t.data_ptr & 0x3FFFFFF, 0, true);
+        if(tracing) {
+            for(unsigned op=0;op<256;++op)gbi->map[op]=trace_functions[op];
+            mp2::debug::write_trace(trace_path,{{"schema",1},{"task",count},{"ucode",uint32_t(gbi->ucode)},
+                {"commands",std::move(trace_commands)}});
+        }
+        const auto& rdp=*app->state->rdp;
+        const auto& scissor=rdp.scissorRectStack[rdp.scissorStackSize-1];
+        mp2::debug::telemetry({{"graphics_task",count},{"display_list",task->t.data_ptr},
+            {"color_image",{{"address",rdp.colorImage.address},{"width",rdp.colorImage.width},{"size",rdp.colorImage.siz}}},
+            {"scissor_q2",{scissor.ulx,scissor.uly,scissor.lrx,scissor.lry}}});
     }
     void send_dummy_workload(uint32_t) override {}
-    void update_screen() override { app->updateScreen(); }
-    void shutdown() override { if (app) app->end(); }
+    void update_screen() override {
+        app->updateScreen();
+        if(mp2::checkpoint::is_paused()&&mp2::debug::needs_present()&&app->state->presentId>0) {
+            // Unchanged VI/RAM normally suppresses presents. Re-present the
+            // last completed image so screenshots/captures work while paused.
+            auto& queue=*app->presentQueue;
+            queue.waitForPresentId(app->state->presentId);queue.waitForIdle();
+            queue.presents[queue.previousWriteCursor()].paused=true;
+            queue.repeatLastPresent();
+        }
+    }
+    void shutdown() override { if (app) app->end(); mp2::debug::clear_render_hooks(); }
     uint32_t get_display_framerate() const override { return 60; }
     float get_resolution_scale() const override { return float(std::max(1,applied.resolution)); }
 };

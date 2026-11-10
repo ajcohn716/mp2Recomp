@@ -132,6 +132,15 @@ code, check connected players, and start or leave the room from that same tab.
 Offline play connects controller port 1. Saves and the runtime's ROM copy live in
 `userdata/`; the EEPROM file is `userdata/saves/mp2.us.bin`.
 
+## Debugging
+
+Logs persist automatically under `userdata/debug/`. Press **F8** for a
+15-second frame/audio capture. Launch with `--debug-controls` for JSON status,
+screenshots, captures and scripted input via `python tools/debug_client.py`.
+Use `--debug-checkpoints` for loadable replay states: **F5** saves, **F9** loads,
+and **F6** resumes.
+See [debug controls and artifact format](docs/debugging.md).
+
 ## Experimental room multiplayer
 
 Launch `./run.sh --netplay` (installed Linux: `./play --netplay`; Windows:

@@ -1,6 +1,7 @@
 // Host-authored adapter for the supported US ROM. Only guest addresses and
 // controller buffer layout are recorded here; game instructions stay generated.
 #include "netplay_game.hpp"
+#include "debug_state.hpp"
 #include "guest_memory.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include <atomic>
@@ -50,16 +51,18 @@ void local_input(uint16_t buttons,float x,float y) {
     Pad pad{buttons};convert_to_n64_range(x,y,pad.x,pad.y);
     std::lock_guard lock(input_mutex);input=pad;
 }
+uint64_t checksum(uint8_t* rdram){return state_checksum(rdram);}
 bool active(){return session || probe;}
-void cancel(){cancelled=true;if(session)session->close();}
+void cancel(){mp2::checkpoint::cancel();cancelled=true;if(session)session->close();}
 bool failed(){return error.load();}
 uint8_t connected_mask(){return session?session->connected_mask():probe?15:1;}
 void initialize(uint8_t* rdram){if(active())MEM_W(0,0x800C99B4)=session?session->seed():0x4D503232;}
 }
-extern "C" int mp2_netplay_active(){return netplay::game::active();}
+extern "C" int mp2_netplay_active(){return netplay::game::active()||mp2::checkpoint::enabled();}
 extern "C" void mp2_netplay_latch(uint8_t* rdram,recomp_context*) {
     using namespace netplay;
     using namespace netplay::game;
+    if(mp2::checkpoint::enabled()){mp2::checkpoint::latch(rdram);return;}
     if(!active())return;
     uint64_t f=frame.load();
     try {
@@ -91,11 +94,11 @@ extern "C" void mp2_netplay_latch(uint8_t* rdram,recomp_context*) {
 // Only game-facing clock reads are virtualized. Audio/VI host pacing continues
 // using the runtime clocks. An N64 Count tick is 1/46,875,000 second.
 extern "C" void osGetTime_recomp(uint8_t* rdram,recomp_context* ctx) {
-    if(!netplay::game::active()){mp2_original_osGetTime_recomp(rdram,ctx);return;}
-    uint64_t ticks=netplay::game::frame.load()*781250ULL;
+    if(!netplay::game::active()&&!mp2::checkpoint::enabled()){mp2_original_osGetTime_recomp(rdram,ctx);return;}
+    uint64_t ticks=(mp2::checkpoint::enabled()?mp2::checkpoint::frame():netplay::game::frame.load())*781250ULL;
     ctx->r2=int32_t(ticks>>32);ctx->r3=int32_t(ticks);
 }
 extern "C" void osGetCount_recomp(uint8_t* rdram,recomp_context* ctx) {
-    if(!netplay::game::active()){mp2_original_osGetCount_recomp(rdram,ctx);return;}
-    ctx->r2=int32_t(netplay::game::frame.load()*781250ULL);
+    if(!netplay::game::active()&&!mp2::checkpoint::enabled()){mp2_original_osGetCount_recomp(rdram,ctx);return;}
+    ctx->r2=int32_t((mp2::checkpoint::enabled()?mp2::checkpoint::frame():netplay::game::frame.load())*781250ULL);
 }

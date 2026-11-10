@@ -2,6 +2,8 @@
 #include "recomp_overlays.inl"
 #include "guest_memory.hpp"
 #include "netplay_game.hpp"
+#include "debug.hpp"
+#include "debug_state.hpp"
 
 extern "C" {
 void HuPrcCall(uint8_t*, recomp_context*);
@@ -27,6 +29,7 @@ void mp2_entry(uint8_t* rdram, recomp_context* ctx) {
     // jumps indirectly to main after establishing its stack.
     for (uint32_t off = 0; off < 0x2DC10; off += 4) MEM_W(off, 0x800D4BF0) = 0;
     netplay::game::initialize(rdram);
+    mp2::checkpoint::initialize_memory(rdram);
     ctx->r29 = (int32_t)0x800FC730;
     func_80000460_1060(rdram, ctx);
 }
@@ -36,6 +39,7 @@ void mp2_overlay_dma(uint32_t rom, int32_t ram, uint32_t size) {
     for (auto& section : section_table) {
         if (section.rom_addr == rom && section.ram_addr == uint32_t(ram)) {
             fprintf(stderr, "[MP2] overlay ROM %08x -> RAM %08x (section %zu)\n", rom, uint32_t(ram), section.index);
+            mp2::debug::event("overlay_loaded",{{"rom",rom},{"ram",uint32_t(ram)},{"section",section.index}});
             unload_overlays(ram, 0x25800);
             load_overlays(rom, ram, section.size);
             return;

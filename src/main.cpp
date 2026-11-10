@@ -3,6 +3,8 @@
 #include <SDL_syswm.h>
 #endif
 #include "settings.hpp"
+#include "debug.hpp"
+#include "debug_state.hpp"
 #include "netplay_game.hpp"
 #include <cstdlib>
 #include <thread>
@@ -75,6 +77,7 @@ unsigned auto_start_at{};
 bool headless{};
 std::optional<netplay::Options> requested_room;
 void set_frequency(uint32_t rate) {
+    mp2::debug::audio_rate(rate);
     if (audio_device) SDL_CloseAudioDevice(audio_device);
     SDL_AudioSpec spec{};
     spec.freq = rate; spec.format = AUDIO_S16SYS; spec.channels = 2; spec.samples = 1024;
@@ -83,7 +86,6 @@ void set_frequency(uint32_t rate) {
     fprintf(stderr, "[MP2] audio %u Hz, device=%u\n", rate, audio_device);
 }
 void queue_audio(int16_t* samples, size_t count) {
-    if (!audio_device) return;
     if (count > 0x8000) {
         fprintf(stderr, "[MP2] invalid audio sample count: %zu\n", count);
         std::abort();
@@ -91,7 +93,8 @@ void queue_audio(int16_t* samples, size_t count) {
     last_audio_frames = count / 2;
     std::vector<int16_t> swapped(count);
     for (size_t i = 0; i < count; ++i) swapped[i] = int16_t(samples[i ^ 1] * settings::gain(int(i % 2)));
-    SDL_QueueAudio(audio_device, swapped.data(), count * sizeof(int16_t));
+    mp2::debug::audio(swapped.data(), count);
+    if(audio_device) SDL_QueueAudio(audio_device, swapped.data(), count * sizeof(int16_t));
 }
 size_t audio_remaining() {
     // AI_LEN describes the current hardware DMA, not the sum of all buffers
@@ -99,9 +102,10 @@ size_t audio_remaining() {
     return audio_device ? std::min(size_t(SDL_GetQueuedAudioSize(audio_device) / 4), last_audio_frames.load()) : 0;
 }
 bool get_input(int port, uint16_t* b, float* x, float* y) {
-    if (netplay::game::active()) return false; // online samples enter at the game latch
+    if (netplay::game::active() || mp2::checkpoint::enabled()) return false; // online samples enter at the game latch
     if (port != 0) return false;
     *b = buttons.load(); *x = stick_x.load(); *y = stick_y.load();
+    mp2::debug::input(*b,*x,*y);
     unsigned vi = vi_count.load();
     if (auto_start_at && vi >= auto_start_at && vi < auto_start_at + 4) *b |= 0x1000;
     return true;
@@ -111,21 +115,29 @@ ultramodern::input::connected_device_info_t connected(int port) {
     return {port >= 0 && port < 4 && (netplay::game::connected_mask() & (1 << port)) ? Device::Controller : Device::None, Pak::None};
 }
 void update_gfx(void*) {
+    mp2::debug::poll();
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F8) { mp2::debug::request_capture(); continue; }
+        if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F5) { mp2::debug::quick_save(); continue; }
+        if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F9) { mp2::debug::quick_load(); continue; }
+        if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F6) { mp2::checkpoint::resume(); continue; }
         if (settings::event(event)) continue;
         if (event.type == SDL_QUIT) { netplay::game::cancel(); ultramodern::quit(); }
         if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) { netplay::game::cancel(); ultramodern::quit(); }
     }
     uint16_t b; float x, y;
     settings::update(b, x, y);
+    if(mp2::checkpoint::enabled()&&auto_start_at&&vi_count>=auto_start_at&&vi_count<auto_start_at+4)b|=0x1000;
     buttons.store(b); stick_x = x; stick_y = y;
     netplay::game::local_input(b,x,y);
+    mp2::checkpoint::local_input(b,x,y);
 }
 void vi_callback() {
     unsigned count = ++vi_count;
+    mp2::debug::vi(count);
     if (count % 300 == 0) fprintf(stderr, "[MP2] VI %u\n", count);
-    if (quit_after && count >= quit_after) ultramodern::quit();
+    if (quit_after && count >= quit_after) { mp2::checkpoint::cancel(); ultramodern::quit(); }
 }
 void message_box(const char* msg) { fprintf(stderr, "[MP2 ERROR] %s\n", msg); }
 RspUcodeFunc* get_ucode(const OSTask* task) {
@@ -152,13 +164,19 @@ int main(int argc, char** argv) try {
     bool open_settings = false, multiplayer = false, bot = false, connect_immediately = false;
     unsigned probe = 0, stop_frame = 0, auto_players = 0;
     netplay::Options network;
-    std::filesystem::path data_directory = "userdata", trace;
+    std::filesystem::path data_directory = "userdata", trace, debug_directory;
+    bool debug_controls=false, checkpoints=false;
+    std::filesystem::path checkpoint_load;
 
     std::filesystem::path rom = "Mario Party 2 (USA).z64";
     for (int i = 1; i < argc; ++i) {
         auto argument = std::string_view(argv[i]);
         auto value = [&]() -> const char* { if(i+1>=argc) throw std::runtime_error("Missing value for " + std::string(argument)); return argv[++i]; };
-        if (argument == "--netplay" || argument == "--host") multiplayer = true;
+        if (argument == "--debug-checkpoints") checkpoints=true;
+        else if (argument == "--debug-load") { checkpoint_load=value(); checkpoints=true; }
+        else if (argument == "--debug-controls") debug_controls=true;
+        else if (argument == "--debug-dir") debug_directory=value();
+        else if (argument == "--netplay" || argument == "--host") multiplayer = true;
         else if (argument == "--netplay-connect") { multiplayer = true; connect_immediately = true; }
         else if (argument == "--join") { multiplayer = true; network.code = value(); }
         else if (argument == "--host-address") network.address = value();
@@ -176,6 +194,8 @@ int main(int argc, char** argv) try {
         else if (std::string_view(argv[i]) == "--auto-start" && i+1 < argc) auto_start_at = std::stoul(argv[++i]);
         else throw std::runtime_error("Unknown argument: " + std::string(argument));
     }
+    debug_controls=debug_controls||checkpoints;
+    mp2::debug::initialize(debug_directory.empty()?data_directory/"debug":debug_directory,debug_controls,headless);
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError()); return 1;
@@ -214,6 +234,9 @@ int main(int argc, char** argv) try {
     } else if (probe) {
         config_dir /= "netplay/probe-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
     }
+    if(checkpoints && (probe||multiplayer)) throw std::runtime_error("Checkpoints require offline play");
+    if(!checkpoint_load.empty())config_dir/= "debug-replays/"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    mp2::checkpoint::configure(checkpoints,checkpoint_load,config_dir/"saves");
     netplay::game::configure(session.get(),probe,stop_frame,trace,bot);
     window = SDL_CreateWindow("Mario Party 2 — Native Recompilation POC", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 720, SDL_WINDOW_RESIZABLE
 #ifndef _WIN32
@@ -274,17 +297,23 @@ int main(int argc, char** argv) try {
     SDL_DestroyWindow(window);
     // The runtime has process-global simulation/thread state. Replace the
     // process after orderly shutdown to boot a synchronized room from frame 0.
-    if (requested_room) {
+    auto load_state=mp2::checkpoint::requested_load();
+    if (requested_room || !load_state.empty()) {
         char* base=SDL_GetBasePath();
         auto executable=base?std::filesystem::path(base)/std::filesystem::path(argv[0]).filename():std::filesystem::absolute(argv[0]);
         SDL_free(base);
-        std::vector<std::string> arguments{executable.string(),"--netplay-connect","--rom",std::filesystem::absolute(rom).string(),
-            "--data-dir",std::filesystem::absolute(data_directory).string(),"--host-address",requested_room->address,
-            "--host-port",std::to_string(requested_room->port)};
-        if(!requested_room->code.empty()){arguments.push_back("--join");arguments.push_back(requested_room->code);}
+        std::vector<std::string> arguments{executable.string(),"--rom",std::filesystem::absolute(rom).string(),
+            "--data-dir",std::filesystem::absolute(data_directory).string()};
+        if(requested_room) {
+            arguments.insert(arguments.end(),{"--netplay-connect","--host-address",requested_room->address,"--host-port",std::to_string(requested_room->port)});
+            if(!requested_room->code.empty()){arguments.push_back("--join");arguments.push_back(requested_room->code);}
+        } else arguments.insert(arguments.end(),{"--debug-checkpoints","--debug-load",load_state.string()});
         if(headless)arguments.push_back("--headless");
+        if(debug_controls)arguments.push_back("--debug-controls");
+        if(!debug_directory.empty()){arguments.push_back("--debug-dir");arguments.push_back(std::filesystem::absolute(debug_directory).string());}
         if(bot)arguments.push_back("--netplay-bot");
         if(stop_frame){arguments.push_back("--netplay-frames");arguments.push_back(std::to_string(stop_frame));}
+        mp2::debug::shutdown();
         SDL_Quit();
 #ifdef _WIN32
         std::wstring command;
@@ -292,7 +321,7 @@ int main(int argc, char** argv) try {
         STARTUPINFOW startup{};startup.cb=sizeof(startup);
         PROCESS_INFORMATION child{};
         if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&startup,&child))
-            throw std::runtime_error("Cannot open netplay lobby: "+std::system_category().message(GetLastError()));
+            throw std::runtime_error("Cannot restart game: "+std::system_category().message(GetLastError()));
         CloseHandle(child.hThread);CloseHandle(child.hProcess);
         return 0;
 #else
@@ -301,10 +330,11 @@ int main(int argc, char** argv) try {
         pointers.push_back(nullptr);
         execv(executable.c_str(),pointers.data());
 #endif
-        throw std::runtime_error(std::string("Cannot open netplay lobby: ")+std::strerror(errno));
+        throw std::runtime_error(std::string("Cannot restart game: ")+std::strerror(errno));
     }
+    mp2::debug::shutdown();
     SDL_Quit();
-    return netplay::game::failed() ? 1 : 0;
+    return netplay::game::failed() || mp2::checkpoint::status()["failed"].get<bool>() ? 1 : 0;
 } catch (const std::exception& e) {
     fprintf(stderr, "[MP2] %s\n", e.what());
     return 1;
