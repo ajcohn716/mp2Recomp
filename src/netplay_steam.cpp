@@ -10,11 +10,11 @@ std::unique_ptr<Transport> steam() {
 #else
 #include <steam/steam_api.h>
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <deque>
 #include <map>
 #include <mutex>
-#include <span>
 
 namespace netplay::transport {
 namespace {
@@ -75,15 +75,21 @@ struct Steam final : Transport {
     static void status_changed(SteamNetConnectionStatusChangedCallback_t* event) {
         if(current)current->status(*event);
     }
-    SteamNetworkingConfigValue_t callback_option() {
-        SteamNetworkingConfigValue_t option;
-        option.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,reinterpret_cast<void*>(&status_changed));
-        return option;
+    std::array<SteamNetworkingConfigValue_t,7> connection_options() {
+        std::array<SteamNetworkingConfigValue_t,7> options;
+        options[0].SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,reinterpret_cast<void*>(&status_changed));
+        options[1].SetInt32(k_ESteamNetworkingConfig_SendBufferSize,1024*1024);
+        options[2].SetInt32(k_ESteamNetworkingConfig_RecvBufferSize,1024*1024);
+        options[3].SetInt32(k_ESteamNetworkingConfig_RecvBufferMessages,256);
+        options[4].SetInt32(k_ESteamNetworkingConfig_RecvMaxMessageSize,16409);
+        options[5].SetInt32(k_ESteamNetworkingConfig_TimeoutInitial,30000);
+        options[6].SetInt32(k_ESteamNetworkingConfig_TimeoutConnected,15000);
+        return options;
     }
     uint16_t listen(const std::string&,uint16_t,std::function<void(std::shared_ptr<Socket>)> callback) override {
         accept=std::move(callback);
-        auto option=callback_option();
-        listener=api->CreateListenSocketP2P(0,1,&option);
+        auto options=connection_options();
+        listener=api->CreateListenSocketP2P(0,int(options.size()),options.data());
         if(!listener)throw std::runtime_error("Could not create Steam P2P room");
         return 1; // invitation format requires nonzero port; Steam uses virtual port 0
     }
@@ -149,7 +155,7 @@ struct Steam final : Transport {
         }
         // Keep handles alive through queued close notifications; release closed
         // records once the Session has detached all callbacks.
-        std::erase_if(peers,[](const auto& entry){return !entry.second->handle&&!entry.second->on_close;});
+        std::erase_if(peers,[](const auto& entry){return !entry.second->handle&&!entry.second->on_close&&!entry.second->pending_close;});
     }
 };
 thread_local Steam* Steam::current{};
@@ -157,7 +163,7 @@ SteamSocket::~SteamSocket(){close();}
 void SteamSocket::open(const std::string& address,uint16_t) {
     SteamNetworkingIdentity remote;remote.SetSteamID64(std::stoull(address));
     if(remote.GetSteamID()==SteamUser()->GetSteamID())throw std::runtime_error("Use a different Steam account and computer to join this room.");
-    auto option=owner.callback_option();handle=owner.api->ConnectP2P(remote,0,1,&option);
+    auto options=owner.connection_options();handle=owner.api->ConnectP2P(remote,0,int(options.size()),options.data());
     if(!handle)throw std::runtime_error("Could not connect to Steam host");
     owner.peers.emplace(handle,std::static_pointer_cast<SteamSocket>(shared_from_this()));
     if(!owner.api->SetConnectionPollGroup(handle,owner.group))throw std::runtime_error("Could not assign Steam receive group");

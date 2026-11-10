@@ -24,20 +24,32 @@ int main() try {
         room.peers.emplace(first->handle,first);room.peers.emplace(second->handle,second);
         require(room.api->SetConnectionPollGroup(first->handle,room.group),"First receive group failed");
         require(room.api->SetConnectionPollGroup(second->handle,room.group),"Second receive group failed");
+        for(auto handle:{first->handle,second->handle})for(auto& option:room.connection_options())
+            require(SteamNetworkingUtils()->SetConfigValueStruct(option,k_ESteamNetworkingConfig_Connection,handle),"Steam connection option rejected");
         int received=0;
+        first->send("hello 0");
+        auto deadline=std::chrono::steady_clock::now()+10s;
+        while(second->received.empty()&&std::chrono::steady_clock::now()<deadline){room.poll();std::this_thread::sleep_for(1ms);}
+        require(second->received.size()==1,"Steam lost a message before Session attached its callback");
         second->on_message=[&](Message message){
             if(received%2==0)require(std::get<std::string>(message)=="hello "+std::to_string(received/2),"Steam text ordering failed");
             else require(std::get<Binary>(message)==Binary(16408,std::byte{uint8_t(received/2)}),"Steam binary ordering failed");
             ++received;
         };
         for(int i=0;i<16;++i) {
-            first->send("hello "+std::to_string(i));first->send(Binary(16408,std::byte{uint8_t(i)}));
+            if(i)first->send("hello "+std::to_string(i));first->send(Binary(16408,std::byte{uint8_t(i)}));
         }
-        auto deadline=std::chrono::steady_clock::now()+10s;
+        deadline=std::chrono::steady_clock::now()+10s;
         while(received!=32&&std::chrono::steady_clock::now()<deadline){room.poll();std::this_thread::sleep_for(1ms);}
         require(received==32,"Steam reliable messages timed out");
         bool oversized=false;try{first->send(Binary(16409));}catch(...){oversized=true;}
         require(oversized,"Oversized Steam packet accepted");
+        bool closed=false;second->on_close=[&]{closed=true;};
+        const std::byte invalid{7};
+        require(room.api->SendMessageToConnection(first->handle,&invalid,1,k_nSteamNetworkingSend_ReliableNoNagle,nullptr)==k_EResultOK,"Malformed record injection failed");
+        deadline=std::chrono::steady_clock::now()+10s;
+        while(!closed&&std::chrono::steady_clock::now()<deadline){room.poll();std::this_thread::sleep_for(1ms);}
+        require(closed&&!second->is_open(),"Invalid Steam record did not close its peer");
         first->reset_callbacks();second->reset_callbacks();first->close();second->close();
         require(!first->is_open()&&!second->is_open(),"Steam close failed");
     }
