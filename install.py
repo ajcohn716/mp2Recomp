@@ -263,9 +263,10 @@ class Installer:
                 tool=lambda name:str(sdk/metadata['tools'][name])
                 python=tool('python');cmake=tool('cmake');cc=tool('cc');cxx=tool('cxx')
                 self.status('Preparing bundled source dependencies')
+                from tools.sdk_files import copy_sdk_sources
                 for name in ('N64Recomp','runtime','rt64','decomp','directx-headers','libdatachannel'):
                     self.check_cancelled()
-                    shutil.copytree(sdk/'sources'/name,source/name,dirs_exist_ok=True,symlinks=False)
+                    copy_sdk_sources(sdk/'sources'/name,source/name)
                 if os.name=='nt' and getattr(sys,'frozen',False):
                     # Reuse the VC runtime already bundled for Qt. DXC also needs
                     # it, including when the system has no VC redistributable.

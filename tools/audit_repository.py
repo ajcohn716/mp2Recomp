@@ -62,6 +62,8 @@ ALLOWED = {
     "tests/fixture_overlays.inl",
     "tools/installer-requirements.txt",
     "tools/dependency_pack.py",
+    "tools/sdk_files.py",
+    "tests/test_sdk_files.py",
     "tools/regenerate.py",
     "tools/build_dependency_pack.py",
     "tools/build_sdl.py",

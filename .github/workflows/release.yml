@@ -142,14 +142,31 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python -m unittest discover -s tests -p test_installer.py -v
-          python -m unittest discover -s tests -p test_prebuilt_runtime.py -v
+          python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Build self-contained GUI and CLI installer
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('test-{0}', github.run_id) }}
           REPOSITORY: ${{ github.repository }}
         run: python tools/package_installer.py --bundle-sdk --metadata dist/metadata --tag "$env:RELEASE_TAG" --repository "$env:REPOSITORY"
         shell: pwsh
+      - name: Verify release SDK extraction and source copying without Windows long-path policy
+        shell: pwsh
+        env:
+          MP2_TEST_CATALOG: build/installer-source
+        run: |
+          $platform = if ($IsWindows) {'windows-x86_64.zip'} else {'linux-x86_64.tar.gz'}
+          $env:MP2_TEST_SDK_ARCHIVE = (Get-Item "dist/metadata/mp2recomp-sdk-$platform").FullName
+          $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+          if ($IsWindows) {
+            $previous = Get-ItemPropertyValue -Path $key -Name LongPathsEnabled
+          }
+          try {
+            if ($IsWindows) { Set-ItemProperty -Path $key -Name LongPathsEnabled -Value 0 }
+            python -m unittest discover -s tests -p test_sdk_files.py -v
+            if ($LASTEXITCODE -ne 0) { throw 'SDK path regression checks failed' }
+          } finally {
+            if ($IsWindows) { Set-ItemProperty -Path $key -Name LongPathsEnabled -Value $previous }
+          }
       - name: Test packaged CLI and GUI
         env:
           QT_QPA_PLATFORM: offscreen

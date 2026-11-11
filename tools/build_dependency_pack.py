@@ -10,6 +10,7 @@ import sys
 import tarfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.dependency_pack import sha256
+from tools.sdk_files import copy_sdk_sources
 ROOT=Path(__file__).resolve().parents[1]
 
 def main():
@@ -43,7 +44,8 @@ def main():
             dict(os.environ,LD_LIBRARY_PATH=str(args.toolchain/'lib')))
         python=stage/'toolchain/bin/python'
     sources=stage/'sources';sources.mkdir(exist_ok=True)
-    for name in ('N64Recomp','runtime','rt64','directx-headers','libdatachannel','SDL'):copytree(ROOT/name,sources/name)
+    for name in ('N64Recomp','runtime','rt64','directx-headers','libdatachannel','SDL'):
+        copy_sdk_sources(ROOT/name,sources/name)
     decomp=sources/'decomp';decomp.mkdir(exist_ok=True)
     for name in ('marioparty2.yaml','symbol_addrs.txt'):shutil.copy2(ROOT/'decomp'/name,decomp/name)
     # Preserve license files and package metadata; only game metadata is taken

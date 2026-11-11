@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import urllib.request
 import zipfile
+from tools.sdk_files import filesystem_path
 
 FORMAT=1
 
@@ -18,7 +19,7 @@ def platform_key():
     return ('windows' if os.name=='nt' else 'linux')+'-x86_64'
 
 def load_sdk(root):
-    root=Path(root).resolve();data=json.loads((root/'sdk.json').read_text())
+    root=filesystem_path(root);data=json.loads((root/'sdk.json').read_text())
     if data.get('format')!=FORMAT or data.get('platform')!=platform_key():raise RuntimeError('Dependency pack is incompatible with this computer.')
     for key in ('python','cmake','ninja','cc','cxx','recompiler','rsp'):
         path=(root/data['tools'][key]).resolve()
@@ -35,7 +36,7 @@ def load_sdk(root):
     return data
 
 def extract_archive(archive,dest):
-    dest=Path(dest).resolve()
+    dest=filesystem_path(dest);archive=filesystem_path(archive)
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive) as z:
             for item in z.infolist():
@@ -48,7 +49,7 @@ def extract_archive(archive,dest):
 
 def sha256(path):
     h=hashlib.sha256()
-    with Path(path).open('rb') as f:
+    with filesystem_path(path).open('rb') as f:
         while chunk:=f.read(1024*1024):h.update(chunk)
     return h.hexdigest()
 
@@ -56,7 +57,7 @@ def ensure_sdk(cache,source_root,run,status,check_cancelled,archive=None,sdk_dir
     if sdk_dir:
         root=Path(sdk_dir).expanduser().resolve();load_sdk(root);return root
     from install import lock_file
-    directory=Path(cache)/'dependencies';directory.mkdir(parents=True,exist_ok=True)
+    directory=filesystem_path(Path(cache)/'dependencies');directory.mkdir(parents=True,exist_ok=True)
     with (directory/'.prepare.lock').open('a') as lock:
         try:lock_file(lock)
         except OSError:raise RuntimeError('Another installer is preparing dependency packs. Try again when it finishes.')
@@ -71,12 +72,13 @@ def _ensure_sdk(cache,source_root,run,status,check_cancelled,archive=None,sdk_di
     catalog=json.loads(catalog_path.read_text());entry=catalog['packs'][platform_key()]
     expected=entry['sha256']
     root=Path(cache)/'dependencies'/expected
-    if (root/'.ready').exists():load_sdk(root);return root
-    parent=root.parent;parent.mkdir(parents=True,exist_ok=True)
+    stored=filesystem_path(root)
+    if (stored/'.ready').exists():load_sdk(stored);return root
+    parent=stored.parent;parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pack-',dir=parent) as temporary:
         temporary=Path(temporary)
         if archive:
-            downloaded=Path(archive).expanduser().resolve()
+            downloaded=filesystem_path(archive)
         else:
             # An offline pack may be distributed beside the packaged installer.
             import sys
@@ -95,13 +97,13 @@ def _ensure_sdk(cache,source_root,run,status,check_cancelled,archive=None,sdk_di
         check_cancelled();unpacked=temporary/'sdk';unpacked.mkdir()
         extract_archive(downloaded,unpacked);data=load_sdk(unpacked)
         # Publish a complete directory only. Concurrent installs can share a pack.
-        try:os.rename(unpacked,root)
+        try:os.rename(unpacked,stored)
         except OSError:
-            if not (root/'sdk.json').is_file():raise
+            if not (stored/'sdk.json').is_file():raise
         if data.get('relocate'):
             env=sdk_environment(root,data)
             run([str(root/data['tools']['python']),str(root/data['relocate'])],root,env)
-    (root/'.ready').write_text('1\n')
+    (stored/'.ready').write_text('1\n')
     return root
 
 def sdk_environment(root,data=None):

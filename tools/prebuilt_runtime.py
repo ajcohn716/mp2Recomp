@@ -8,7 +8,7 @@ RECIPE_FILES = (
     'dependencies.json', 'CMakeLists.txt', 'cmake/PrebuiltRuntime.cmake',
     'cmake/MinGWCompat.cmake', 'cmake/Netplay.cmake',
     'src/mingw_compat.hpp',
-    'tools/build_dependency_pack.py', 'tools/prebuilt_runtime.py',
+    'tools/build_dependency_pack.py', 'tools/prebuilt_runtime.py', 'tools/sdk_files.py',
     'tools/build_sdl.py', 'tools/dependency-environment.yml',
     'tools/steam_sdk.py', 'steam-helper/CMakeLists.txt',
     'steam-helper/STEAMWORKS-NOTICE.txt', 'LICENSE-STEAM-HELPER',
