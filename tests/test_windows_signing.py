@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -210,6 +211,28 @@ function Get-AuthenticodeSignature {
     def test_no_binaries_is_an_error(self):
         _, output = self.run_inventory('Prepare', {}, False)
         self.assertIn('No Windows binaries', output)
+
+
+@unittest.skipUnless(sys.platform == 'win32' and shutil.which('pwsh'),
+                     'Real Authenticode verification requires Windows')
+class WindowsTrustTests(unittest.TestCase):
+    def test_microsoft_signature_is_valid_and_tampering_is_rejected(self):
+        # GitHub's Windows runner provides a Microsoft-signed PowerShell binary.
+        # Also check a PE with a .pyd extension, as Python modules need coverage.
+        with tempfile.TemporaryDirectory(prefix='windows trust ') as temporary:
+            folder = Path(temporary)
+            binary = folder / 'signed.exe'
+            shutil.copy2(shutil.which('pwsh'), binary)
+            shutil.copy2(binary, folder / 'extension.pyd')
+            release.verify_binaries(folder)
+            with binary.open('r+b') as stream:
+                stream.seek(1024)
+                original = stream.read(1)
+                self.assertTrue(original)
+                stream.seek(1024)
+                stream.write(bytes([original[0] ^ 1]))
+            with self.assertRaises(subprocess.CalledProcessError):
+                release.verify_binaries(folder)
 
 
 if __name__ == '__main__':
