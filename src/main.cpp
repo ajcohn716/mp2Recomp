@@ -100,6 +100,7 @@ std::optional<std::filesystem::path> choose_rom_file() {
 
 std::optional<std::filesystem::path> prepare_rom(const std::filesystem::path& requested,
                                                  const std::filesystem::path& config_dir,
+                                                 const std::filesystem::path& game_directory,
                                                  bool allow_picker) {
     recomp::GameEntry game{
         .rom_hash = 0xd2dbfb3b4d7a5e81ULL,
@@ -138,6 +139,17 @@ std::optional<std::filesystem::path> prepare_rom(const std::filesystem::path& re
     }
     if ((correct_size(stored) && recomp::load_stored_rom(game_id)) || import(rom_filename)) {
         return stored;
+    }
+    std::error_code directory_error;
+    for (std::filesystem::directory_iterator entry(game_directory / "games", directory_error), end;
+         !directory_error && entry != end; entry.increment(directory_error)) {
+        const auto& path = entry->path();
+        const auto extension = path.extension().u8string();
+        if (extension != u8".z64" && extension != u8".Z64" &&
+            extension != u8".v64" && extension != u8".V64" &&
+            extension != u8".n64" && extension != u8".N64") continue;
+        std::error_code file_error;
+        if (entry->is_regular_file(file_error) && import(path)) return stored;
     }
     if (!allow_picker) throw std::runtime_error(invalid_rom);
     while (auto selected = choose_rom_file()) {
@@ -272,9 +284,13 @@ int main(int argc, char** argv) try {
         extern int mp2_self_test();return mp2_self_test();
     }
     const auto launch_directory = std::filesystem::current_path();
+    auto game_directory = launch_directory;
+    if (const std::unique_ptr<char, decltype(&SDL_free)> base{SDL_GetBasePath(), SDL_free}; base) {
+        game_directory = std::filesystem::u8path(base.get());
 #ifdef _WIN32
-    if(char* base=SDL_GetBasePath()) { std::filesystem::current_path(std::filesystem::u8path(base));SDL_free(base); }
+        std::filesystem::current_path(game_directory);
 #endif
+    }
     bool open_settings = false, multiplayer = false, bot = false, connect_immediately = false;
     unsigned probe = 0, stop_frame = 0, auto_players = 0;
     netplay::Options network;
@@ -322,7 +338,7 @@ int main(int argc, char** argv) try {
     if (probe && multiplayer) throw std::runtime_error("Use either a local probe or multiplayer");
     if ((probe || multiplayer) && auto_start_at) throw std::runtime_error("Use --netplay-bot for deterministic automated inputs");
     auto config_dir = std::filesystem::absolute(data_directory);
-    const auto rom = prepare_rom(requested_rom, config_dir, !headless && !probe);
+    const auto rom = prepare_rom(requested_rom, config_dir, game_directory, !headless && !probe);
     if (!rom) { SDL_Quit(); return 0; }
     debug_controls=debug_controls||checkpoints;
     mp2::debug::initialize(debug_directory.empty()?data_directory/"debug":debug_directory,debug_controls,headless);
