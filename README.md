@@ -1,7 +1,7 @@
 # Mario Party 2 Recompiled
 
 [Downloads](https://github.com/ajcohn716/mp2Recomp/releases) ·
-[Release notes](docs/releases/v0.3.1.md) · [GPLv3 or later](LICENSE)
+[Release notes](docs/releases/v0.3.2.md) · [GPLv3 or later](LICENSE)
 
 A native PC recompilation of **Mario Party 2** for Linux and Windows x86-64.
 
