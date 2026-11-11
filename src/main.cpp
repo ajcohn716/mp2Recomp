@@ -23,6 +23,9 @@
 #endif
 #include "librecomp/game.hpp"
 #include "librecomp/overlays.hpp"
+#ifndef _WIN32
+#include <gtk/gtk.h>
+#endif
 
 void register_mp2_overlays();
 void mp2_entry(uint8_t*, recomp_context*);
@@ -114,6 +117,52 @@ ultramodern::input::connected_device_info_t connected(int port) {
     using namespace ultramodern::input;
     return {port >= 0 && port < 4 && (netplay::game::connected_mask() & (1 << port)) ? Device::Controller : Device::None, Pak::None};
 }
+void publish_input(uint16_t b, float x, float y) {
+    buttons.store(b); stick_x = x; stick_y = y;
+    netplay::game::local_input(b,x,y);
+    mp2::checkpoint::local_input(b,x,y);
+}
+bool confirm_quit() {
+    constexpr char title[] = "Quit Mario Party 2?";
+    constexpr char prompt[] = "Are you sure you want to quit?";
+
+    // The game can keep running while the dialog blocks input polling.
+    publish_input(0, 0, 0);
+#ifdef _WIN32
+    constexpr int quit_button = 1;
+    const SDL_MessageBoxButtonData choices[] = {
+        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
+        {0, quit_button, "Quit"},
+    };
+    const SDL_MessageBoxData dialog = {
+        SDL_MESSAGEBOX_WARNING, window, title, prompt, SDL_arraysize(choices), choices, nullptr,
+    };
+    int response = -1;
+    if (SDL_ShowMessageBox(&dialog, &response) != 0) {
+        fprintf(stderr, "[MP2] Could not show quit confirmation: %s\n", SDL_GetError());
+        return false;
+    }
+    return response == quit_button;
+#else
+    // Put the GTK dialog on the same display backend as the game.
+    gdk_set_allowed_backends(SDL_GetCurrentVideoDriver());
+    if (!gtk_init_check(nullptr, nullptr)) {
+        fputs("[MP2] Could not initialize GTK for quit confirmation.\n", stderr);
+        return false;
+    }
+    GtkWidget* dialog = gtk_message_dialog_new(nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
+                                               GTK_BUTTONS_NONE, "%s", prompt);
+    gtk_window_set_title(GTK_WINDOW(dialog), title);
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER);
+    gtk_dialog_add_buttons(GTK_DIALOG(dialog), "_Cancel", GTK_RESPONSE_CANCEL, "_Quit", GTK_RESPONSE_ACCEPT, nullptr);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+    int response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    // Send the close request before returning to the SDL event loop.
+    gdk_display_flush(gdk_display_get_default());
+    return response == GTK_RESPONSE_ACCEPT;
+#endif
+}
 void update_gfx(void*) {
     mp2::debug::poll();
     SDL_Event event;
@@ -123,15 +172,18 @@ void update_gfx(void*) {
         if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F9) { mp2::debug::quick_load(); continue; }
         if (event.type == SDL_KEYDOWN && !event.key.repeat && event.key.keysym.scancode == SDL_SCANCODE_F6) { mp2::checkpoint::resume(); continue; }
         if (settings::event(event)) continue;
-        if (event.type == SDL_QUIT) { netplay::game::cancel(); ultramodern::quit(); }
-        if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) { netplay::game::cancel(); ultramodern::quit(); }
+        const bool escape_pressed = event.type == SDL_KEYDOWN && !event.key.repeat &&
+                                    event.key.keysym.scancode == SDL_SCANCODE_ESCAPE;
+        if (event.type == SDL_QUIT || (escape_pressed && confirm_quit())) {
+            netplay::game::cancel();
+            ultramodern::quit();
+            return;
+        }
     }
     uint16_t b; float x, y;
     settings::update(b, x, y);
     if(mp2::checkpoint::enabled()&&auto_start_at&&vi_count>=auto_start_at&&vi_count<auto_start_at+4)b|=0x1000;
-    buttons.store(b); stick_x = x; stick_y = y;
-    netplay::game::local_input(b,x,y);
-    mp2::checkpoint::local_input(b,x,y);
+    publish_input(b, x, y);
 }
 void vi_callback() {
     unsigned count = ++vi_count;

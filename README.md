@@ -72,7 +72,7 @@ Keyboard controls work immediately:
 | Analog stick | Arrow keys |
 | L / R | Q / E |
 | C up / down / left / right | I / K / J / L |
-| Quit | Escape or close window |
+| Quit | Escape, then **Quit**, or close the game window |
 
 Press **F1** for settings. From a source checkout, you can also launch with
 `./run.sh --settings`. Escape or **Done** closes settings. The game keeps running
