@@ -41,7 +41,7 @@ std::unique_ptr<Session> lobby(const Options& initial,const std::vector<uint8_t>
             if(e.type==SDL_QUIT){if(settings::visible())settings::toggle();break;}
             settings::event(e);
         }
-        uint16_t buttons;float x,y;settings::update(buttons,x,y);
+        settings::update();
         SDL_Delay(16);
     }
     if(settings::visible())settings::toggle();

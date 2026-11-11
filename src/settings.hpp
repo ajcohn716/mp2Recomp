@@ -1,11 +1,20 @@
 #pragma once
 #include <SDL.h>
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include "netplay.hpp"
 #include "netplay_steam_social.hpp"
 namespace settings {
 enum class Page { Input, Audio, Graphics, Netplay };
+struct Input {
+    uint16_t buttons{};
+    float x{}, y{};
+    bool connected{};
+};
+using Inputs = std::array<Input, 4>;
+
 struct Graphics {
     int resolution{1}; // 0 = fit window, 1..4 = native resolution multiplier
     int aspect{}; // original, 16:9, fit window
@@ -30,7 +39,8 @@ void show(Page page);
 void shutdown();
 void toggle();
 bool event(const SDL_Event& event);
-void update(uint16_t& buttons, float& x, float& y);
+void update();
+Inputs read_inputs(bool focused);
 float gain(int channel);
 bool visible();
 }

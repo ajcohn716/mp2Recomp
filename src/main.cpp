@@ -291,8 +291,10 @@ void update_gfx(void*) {
             return;
         }
     }
-    uint16_t b; float x, y;
-    settings::update(b, x, y);
+    settings::update();
+    auto primary = settings::read_inputs(SDL_GetKeyboardFocus() != nullptr).front();
+    auto b = primary.buttons;
+    auto x = primary.x, y = primary.y;
     if(mp2::checkpoint::enabled()&&auto_start_at&&vi_count>=auto_start_at&&vi_count<auto_start_at+4)b|=0x1000;
     publish_input(b, x, y);
 }

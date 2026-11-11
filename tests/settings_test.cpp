@@ -21,7 +21,7 @@ int main(int argc,char**argv){
  assert(argc==2);
  assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER)==0);
  settings::init(argv[1]);settings::toggle();assert(settings::visible());
- uint16_t b=123;float x=1,y=1;settings::update(b,x,y);assert(!b&&!x&&!y);
+ settings::update();
  SDL_Window*w=nullptr;for(int i=1;i<20;++i)if(auto* candidate=SDL_GetWindowFromID(i))w=candidate;assert(w);
  auto click=[&](int px,int py){SDL_Event e{};e.type=SDL_MOUSEBUTTONDOWN;e.button.windowID=SDL_GetWindowID(w);e.button.button=SDL_BUTTON_LEFT;e.button.x=px;e.button.y=py;settings::event(e);e.type=SDL_MOUSEBUTTONUP;settings::event(e);};
  auto key=[&](SDL_Scancode k,Uint16 mod=0){SDL_Event e{};e.type=SDL_KEYDOWN;e.key.windowID=SDL_GetWindowID(w);e.key.keysym.scancode=k;e.key.keysym.mod=mod;settings::event(e);};
@@ -38,7 +38,7 @@ int main(int argc,char**argv){
  std::optional<netplay::Options> request;
  // Default Steam room creation needs neither IP detection nor a valid TCP port.
  settings::set_netplay({.connect=[&](const auto& o){request=o;}});
- click(620,90);settings::update(b,x,y);assert(lookup_calls==0);
+ click(620,90);settings::update();assert(lookup_calls==0);
  click(40,264);assert(request&&request->transport==netplay::Transport::Steam);request.reset();
  // Switch to Direct TCP and retain its validation and address lookup behavior.
  click(40,164);click(40,264);assert(request&&request->transport==netplay::Transport::Direct);request.reset();
@@ -49,7 +49,7 @@ int main(int argc,char**argv){
  click(40,468);assert(!request); // Empty invitation cannot launch.
  click(40,370);type("MP2-test-code");click(40,468);assert(request&&request->code=="MP2-test-code");
  // Public-IP work must not block the UI, replace an edit, or ignore explicit CLI addresses.
- auto tick=[&]{settings::update(b,x,y);};
+ auto tick=[] {settings::update();};
  auto wait=[&](auto ready){auto end=SDL_GetTicks()+2000;while(!ready()){assert(SDL_GetTicks()<end);tick();SDL_Delay(1);}};
  auto setup=[&](netplay::Options initial=netplay::Options{.transport=netplay::Transport::Direct}){request.reset();settings::set_netplay({.connect=[&](const auto& o){request=o;}},initial);tick();};
  auto host_address=[&]{click(40,264);assert(request);return request->address;};
@@ -127,4 +127,97 @@ int main(int argc,char**argv){
  assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER)==0);settings::init(argv[1]);
  assert(std::abs(settings::gain(1)-.5f)<.01);assert(settings::graphics()==settings::Graphics{});
  settings::shutdown();SDL_Quit();
+
+ // Identical SDL controllers must each drive exactly one port.
+ SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+ assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) == 0);
+ auto attach = [](SDL_GameControllerButton button, Sint16 axis) {
+     int index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER,
+         SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
+     assert(index >= 0);
+     auto* joystick = SDL_JoystickOpen(index);
+     assert(joystick);
+     assert(SDL_JoystickSetVirtualButton(joystick, button, 1) == 0);
+     assert(SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_LEFTX, axis) == 0);
+     return joystick;
+ };
+ auto pump = [] {
+     SDL_Event event;
+     while (SDL_PollEvent(&event)) settings::event(event);
+ };
+ settings::init(std::filesystem::path(argv[1]) / "controllers");
+ auto inputs = settings::read_inputs(true);
+ assert(inputs[0].connected && !inputs[1].connected);
+ settings::shutdown();
+
+ auto* first = attach(SDL_CONTROLLER_BUTTON_A, 16000);
+ auto* second = attach(SDL_CONTROLLER_BUTTON_X, -16000);
+ auto* third = attach(SDL_CONTROLLER_BUTTON_START, 1000);
+ auto* fourth = attach(SDL_CONTROLLER_BUTTON_LEFTSHOULDER, 0);
+ settings::init(std::filesystem::path(argv[1]) / "controllers");
+ pump();
+ inputs = settings::read_inputs(true);
+ assert(std::all_of(inputs.begin(), inputs.end(), [](auto input) { return input.connected; }));
+ assert(inputs[0].buttons == 0x8000 && inputs[0].x > 0);
+ assert(inputs[1].buttons == 0x4000 && inputs[1].x < 0);
+ assert(inputs[2].buttons == 0x1000 && inputs[2].x == 0);
+ assert(inputs[3].buttons == 0x2000 && inputs[3].x == 0);
+
+ auto assert_neutral = [](const settings::Inputs& samples) {
+     assert(std::all_of(samples.begin(), samples.end(), [](auto input) {
+         return input.connected && !input.buttons && !input.x && !input.y;
+     }));
+ };
+ assert_neutral(settings::read_inputs(false));
+ settings::toggle();
+ assert(settings::visible());
+ assert_neutral(settings::read_inputs(true));
+ settings::toggle();
+
+ // Device indices change on removal. The other players keep their ports,
+ // and the next controller fills the vacancy.
+ assert(SDL_JoystickDetachVirtual(1) == 0);
+ SDL_JoystickClose(second);
+ pump();
+ inputs = settings::read_inputs(true);
+ assert(!inputs[1].connected && inputs[1].buttons == 0 && inputs[1].x == 0);
+ assert(inputs[0].buttons == 0x8000 && inputs[2].buttons == 0x1000 && inputs[3].buttons == 0x2000);
+ auto* replacement = attach(SDL_CONTROLLER_BUTTON_B, 0);
+ pump();
+ inputs = settings::read_inputs(true);
+ assert(inputs[1].connected && inputs[1].buttons == 4 && inputs[2].buttons == 0x1000);
+
+ // Selecting another Player 1 controller swaps ports without duplicating it.
+ settings::toggle();
+ w = SDL_GetKeyboardFocus();
+ if (!w) {
+     for (Uint32 id = 1; id < 20; ++id) {
+         if (auto* candidate = SDL_GetWindowFromID(id)) w = candidate;
+     }
+ }
+ assert(w);
+ click(250, 130);
+ settings::toggle();
+ inputs = settings::read_inputs(true);
+ assert(inputs[0].buttons == 0x1000 && inputs[2].buttons == 0x8000);
+ assert(inputs[1].buttons == 4 && inputs[3].buttons == 0x2000);
+
+ // A fifth pad stays unassigned. Player 1 can also use only the keyboard
+ // while the other players continue using their controllers.
+ auto* extra = attach(SDL_CONTROLLER_BUTTON_Y, 0);
+ pump();
+ assert(settings::read_inputs(true)[1].buttons == 4);
+ settings::toggle();
+ click(250, 130);
+ click(250, 130);
+ click(250, 130);
+ click(250, 130);
+ settings::toggle();
+ inputs = settings::read_inputs(true);
+ assert(inputs[0].connected && !inputs[0].buttons);
+ assert(inputs[1].buttons == 0x2000 && inputs[2].buttons == 0x8000 && inputs[3].buttons == 0x1000);
+
+ settings::shutdown();
+ for (auto* joystick : {first, third, fourth, replacement, extra}) SDL_JoystickClose(joystick);
+ SDL_Quit();
 }

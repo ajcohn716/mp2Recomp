@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cmath>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -35,9 +36,8 @@ SDL_Window* window{};
 SDL_Window* game_window{};
 SDL_Renderer* renderer{};
 TTF_Font* font{};
-SDL_GameController* controller{};
+std::array<SDL_GameController*, Inputs{}.size()> controllers{};
 std::vector<int> devices;
-int selected{-1};
 std::string preferred;
 std::filesystem::path file;
 std::array<std::atomic<float>,3> levels{1.f,1.f,1.f};
@@ -106,22 +106,87 @@ void save() {
 std::string identity(int index) {
     char guid[33]; SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(index),guid,sizeof(guid)); return guid;
 }
-void select(int device) {
-    if(controller) SDL_GameControllerClose(controller);
-    controller=nullptr; selected=device;
-    if(device>=0) controller=SDL_GameControllerOpen(device);
-    if(controller) preferred=identity(device);
-    else {selected=-1; preferred="keyboard";}
-    dirty=true;
+SDL_JoystickID instance_id(SDL_GameController* controller) {
+    return controller ? SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller)) : -1;
+}
+auto assigned_port(SDL_JoystickID id) {
+    return std::find_if(controllers.begin(), controllers.end(), [id](auto* controller) {
+        return controller && instance_id(controller) == id;
+    });
 }
 void refresh() {
+    for (auto& controller : controllers) {
+        if (controller && !SDL_GameControllerGetAttached(controller)) {
+            SDL_GameControllerClose(controller);
+            controller = nullptr;
+        }
+    }
+
     devices.clear();
-    for(int i=0;i<SDL_NumJoysticks();++i) if(SDL_IsGameController(i)) devices.push_back(i);
-    int choice=-1;
-    if(preferred!="keyboard") for(int i:devices) if(preferred.empty() || preferred==identity(i)) {choice=i;break;}
-    std::string wanted=preferred;
-    select(choice);
-    if(choice<0 && wanted!="keyboard") preferred=wanted;
+    int count = SDL_NumJoysticks();
+    for (int i = 0; i < count; ++i) {
+        if (SDL_IsGameController(i)) devices.push_back(i);
+    }
+
+    auto unassigned = [](int device) {
+        return assigned_port(SDL_JoystickGetDeviceInstanceID(device)) == controllers.end();
+    };
+    auto& primary = controllers.front();
+    if (!primary && preferred != "keyboard") {
+        for (int device : devices) {
+            if (unassigned(device) && (preferred.empty() || preferred == identity(device))) {
+                primary = SDL_GameControllerOpen(device);
+                if (primary) {
+                    preferred = identity(device);
+                    break;
+                }
+            }
+        }
+    }
+    // Keep attached controllers on their ports even when SDL device indices change.
+    for (int device : devices) {
+        auto vacant = std::find(controllers.begin() + 1, controllers.end(), nullptr);
+        if (vacant == controllers.end()) break;
+        if (unassigned(device)) *vacant = SDL_GameControllerOpen(device);
+    }
+    dirty = true;
+}
+void cycle_primary() {
+    auto& primary = controllers.front();
+    auto current = std::find_if(devices.begin(), devices.end(), [&](int device) {
+        return primary && SDL_JoystickGetDeviceInstanceID(device) == instance_id(primary);
+    });
+    auto next = current == devices.end() ? devices.begin() : std::next(current);
+    if (next == devices.end()) {
+        if (primary) SDL_GameControllerClose(primary);
+        primary = nullptr;
+        preferred = "keyboard";
+    } else {
+        auto assigned = assigned_port(SDL_JoystickGetDeviceInstanceID(*next));
+        if (assigned != controllers.end()) {
+            std::swap(primary, *assigned);
+        } else {
+            auto* replacement = SDL_GameControllerOpen(*next);
+            if (!replacement) {
+                status = SDL_GetError();
+                dirty = true;
+                return;
+            }
+            if (primary) SDL_GameControllerClose(primary);
+            primary = replacement;
+        }
+        preferred = identity(*next);
+    }
+    capture = -1;
+    refresh();
+    save();
+}
+std::string controller_name(SDL_GameController* controller, const char* fallback) {
+    if (controller) {
+        if (const char* name = SDL_GameControllerName(controller)) return name;
+        return "Gamepad";
+    }
+    return fallback;
 }
 void text(int x,int y,const std::string& s,SDL_Color color={223,230,242,255}) {
     SDL_Surface* surface=TTF_RenderUTF8_Blended(font,s.c_str(),color);
@@ -152,9 +217,9 @@ void draw() {
     const char* tabs[]={"Input","Audio","Graphics","Netplay"};
     for(int i=0;i<4;++i)button(24+i*190,80,182,tabs[i],int(page)==i);
     if(page==Page::Input) {
-        text(24,126,"Your controller");
-        std::string device=controller?SDL_GameControllerName(controller):"Keyboard only";
-        button(230,122,540,device+"  >");
+        text(24,126,"Player 1 controller");
+        box({230,122,540,26},{42,53,73,255});
+        clipped_text(238,124,524,controller_name(controllers.front(),"Keyboard only")+"  >");
         text(24,163,"Stick deadzone");
         box({230,173,300,6},{53,66,88,255});box({230,173,deadzone*3,6},{85,159,242,255});
         box({226+deadzone*3,168,8,16},{217,234,255,255});text(550,163,std::to_string(deadzone)+"%");
@@ -165,7 +230,12 @@ void draw() {
             const char* name=SDL_GameControllerGetStringForButton(SDL_GameControllerButton(b.button));
             button(490,y,280,capture==int(i)&&capture_pad?"Press a button...":(name?name:"Unassigned"),capture==int(i)&&capture_pad);
         }
-        text(24,648,"Analog stick: left stick / arrow keys. Escape cancels rebinding.");
+        if (!network_actions.lobby && !room.running) {
+            for (size_t port = 1; port < controllers.size(); ++port) {
+                clipped_text(24 + int(port - 1) * 250, 648, 240,
+                    "P" + std::to_string(port + 1) + "  " + controller_name(controllers[port], "Disconnected"));
+            }
+        }
     } else if(page==Page::Audio) {
         text(24,130,"Audio levels");
         const char* labels[]={"Master volume","Left channel","Right channel"};
@@ -339,7 +409,7 @@ void toggle() {
     open=true;dirty=true;SDL_ShowWindow(window);SDL_RaiseWindow(window);
 }
 bool event(const SDL_Event& e) {
-    if(e.type==SDL_CONTROLLERDEVICEADDED||e.type==SDL_CONTROLLERDEVICEREMOVED){refresh();dirty=true;}
+    if(e.type==SDL_CONTROLLERDEVICEADDED||e.type==SDL_CONTROLLERDEVICEREMOVED)refresh();
     if(e.type==SDL_KEYDOWN&&!e.key.repeat&&e.key.keysym.scancode==SDL_SCANCODE_F1){toggle();return true;}
     if(!open || e.type==SDL_QUIT)return false;
     auto id=SDL_GetWindowID(window);
@@ -373,8 +443,7 @@ bool event(const SDL_Event& e) {
         if(target.size()+value.size()<=512)target+=value;
         dirty=true;
     }
-    if(e.type==SDL_CONTROLLERBUTTONDOWN&&capture>=0&&capture_pad&&controller&&
-       e.cbutton.which==SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller))) {
+    if(e.type==SDL_CONTROLLERBUTTONDOWN&&capture>=0&&capture_pad&&assigned_port(e.cbutton.which)!=controllers.end()) {
         bindings[capture].button=e.cbutton.button;capture=-1;save();
     }
     if(e.type==SDL_MOUSEBUTTONDOWN&&e.button.windowID==id&&e.button.button==SDL_BUTTON_LEFT) {
@@ -383,11 +452,7 @@ bool event(const SDL_Event& e) {
         if(hit(x,y,660,684,110,26)){toggle();return true;}
         if(page==Page::Input) {
             if(hit(x,y,220,163,320,24)){drag=3;slider(3,x);}
-            if(hit(x,y,230,122,540,26)){
-                auto it=std::find(devices.begin(),devices.end(),selected);
-                int next=selected<0?(devices.empty()?-1:devices.front()):((it!=devices.end()&&++it!=devices.end())?*it:-1);
-                select(next);save();
-            }
+            if(hit(x,y,230,122,540,26))cycle_primary();
             if(y>=236&&y<642){int row=(y-236)/29;if(row<int(bindings.size())&&y<236+row*29+26&&x>=230&&x<770){capture=row;capture_pad=x>=490;dirty=true;}}
         } else if(page==Page::Audio) {
             for(int i=0;i<3;++i)if(hit(x,y,220,184+i*60,320,24)){drag=i;slider(i,x);}
@@ -467,8 +532,7 @@ bool event(const SDL_Event& e) {
     if(e.type==SDL_MOUSEBUTTONUP&&drag>=0){drag=-1;save();}
     return true;
 }
-void update(uint16_t& b,float& x,float& y) {
-    b=0;x=y=0;
+void update() {
     if(network_actions.steam_status&&(last_social_poll==0||SDL_GetTicks()-last_social_poll>=250)) {
         last_social_poll=SDL_GetTicks();
         try {
@@ -514,19 +578,57 @@ void update(uint16_t& b,float& x,float& y) {
         }
         static Uint32 last_poll{};
         if(page==Page::Netplay&&network_actions.status&&SDL_GetTicks()-last_poll>=100){room=network_actions.status();dirty=true;last_poll=SDL_GetTicks();}
-        if(dirty)draw();return;
-    }
-    if(SDL_GetKeyboardFocus()==nullptr)return;
-    auto keys=SDL_GetKeyboardState(nullptr);
-    for(auto& binding:bindings)if(keys[binding.key]||(controller&&SDL_GameControllerGetButton(controller,SDL_GameControllerButton(binding.button))))b|=binding.mask;
-    x=float(keys[SDL_SCANCODE_RIGHT])-float(keys[SDL_SCANCODE_LEFT]);
-    y=float(keys[SDL_SCANCODE_UP])-float(keys[SDL_SCANCODE_DOWN]);
-    if(controller){
-        float cx=SDL_GameControllerGetAxis(controller,SDL_CONTROLLER_AXIS_LEFTX)/32768.f;
-        float cy=-SDL_GameControllerGetAxis(controller,SDL_CONTROLLER_AXIS_LEFTY)/32768.f;
-        float length=std::sqrt(cx*cx+cy*cy), threshold=deadzone/100.f;
-        if(length>threshold){float scale=std::min(1.f,(length-threshold)/(1-threshold))/length;x=std::clamp(x+cx*scale,-1.f,1.f);y=std::clamp(y+cy*scale,-1.f,1.f);}
+        if(dirty)draw();
     }
 }
-void shutdown(){if(controller)SDL_GameControllerClose(controller);if(renderer)SDL_DestroyRenderer(renderer);if(window)SDL_DestroyWindow(window);if(font)TTF_CloseFont(font);if(TTF_WasInit())TTF_Quit();controller=nullptr;renderer=nullptr;window=nullptr;font=nullptr;open=false;game_window=nullptr;network_actions={};room={};SDL_StopTextInput();}
+Inputs read_inputs(bool focused) {
+    Inputs inputs{};
+    inputs.front().connected = true; // The keyboard always provides port 1.
+    for (size_t port = 0; port < controllers.size(); ++port) {
+        auto* controller = controllers[port];
+        if (!controller) continue;
+        auto& input = inputs[port];
+        input.connected = true;
+        if (!focused || open) continue;
+
+        for (const auto& binding : bindings) {
+            if (SDL_GameControllerGetButton(controller, SDL_GameControllerButton(binding.button))) {
+                input.buttons |= binding.mask;
+            }
+        }
+        float x = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX) / 32768.f;
+        float y = -SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY) / 32768.f;
+        float length = std::sqrt(x * x + y * y);
+        float threshold = deadzone / 100.f;
+        if (length > threshold) {
+            float scale = std::min(1.f, (length - threshold) / (1 - threshold)) / length;
+            input.x = x * scale;
+            input.y = y * scale;
+        }
+    }
+    if (focused && !open) {
+        auto keys = SDL_GetKeyboardState(nullptr);
+        auto& input = inputs.front();
+        for (const auto& binding : bindings) {
+            if (keys[binding.key]) input.buttons |= binding.mask;
+        }
+        float x = float(keys[SDL_SCANCODE_RIGHT]) - float(keys[SDL_SCANCODE_LEFT]);
+        float y = float(keys[SDL_SCANCODE_UP]) - float(keys[SDL_SCANCODE_DOWN]);
+        input.x = std::clamp(input.x + x, -1.f, 1.f);
+        input.y = std::clamp(input.y + y, -1.f, 1.f);
+    }
+    return inputs;
+}
+void shutdown() {
+    for (auto& controller : controllers) {
+        if (controller) SDL_GameControllerClose(controller);
+        controller = nullptr;
+    }
+    devices.clear();
+    if(renderer)SDL_DestroyRenderer(renderer);
+    if(window)SDL_DestroyWindow(window);
+    if(font)TTF_CloseFont(font);
+    if(TTF_WasInit())TTF_Quit();
+    renderer=nullptr;window=nullptr;font=nullptr;open=false;game_window=nullptr;network_actions={};room={};SDL_StopTextInput();
+}
 }
