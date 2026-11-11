@@ -13,7 +13,7 @@ import install
 
 class InstallerTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
+        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name).resolve()
         self.data=bytes.fromhex('80371240')+b'fixture-data'
         self.rom=self.root/'my rom.z64';self.rom.write_bytes(self.data)
         self.patches=[patch.object(install,'ROM_SIZE',len(self.data)),patch.object(install,'ROM_SHA1',hashlib.sha1(self.data).hexdigest())]
