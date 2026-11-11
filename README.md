@@ -1,13 +1,10 @@
 # Mario Party 2 Recompiled
 
 [Downloads](https://github.com/ajcohn716/mp2Recomp/releases) ·
-[Release notes](docs/releases/v0.2.3.md) · [GPLv3 or later](LICENSE)
+[Release notes](docs/releases/v0.3.0.md) · [GPLv3 or later](LICENSE)
 
 A native PC recompilation of **Mario Party 2** for Linux and Windows x86-64.
 
-[Prebuilt game packages](docs/prebuilt-game.md) can be played by opening the
-game and selecting your ROM. The guide also covers building a portable package
-on a release machine.
 The US game boots through the logos and animated opening to the title screen.
 Game CPU code runs natively, with RT64 for graphics and N64ModernRuntime for
 system services.
@@ -20,43 +17,30 @@ still need validation. Some title prompt glyphs appear as blocks. See
 ## Quick start
 
 You need a Linux or Windows **x86-64** computer with a **Vulkan-capable graphics
-driver** and your own unmodified **Mario Party 2 USA ROM**. The installer accepts
+driver** and your own unmodified **Mario Party 2 USA ROM**. The game accepts
 `.z64`, `.v64`, and `.n64` files; other regions and modified ROMs are rejected.
 
 1. Open [Releases](https://github.com/ajcohn716/mp2Recomp/releases) and download
-   `mp2recomp-installer-linux-x86_64.tar.gz` or
-   `mp2recomp-installer-windows-x86_64.zip` for your platform.
-2. Extract the whole archive and keep its files together. Leave the included
-   SDK archive compressed beside the installer; it contains the build tools.
-   Put your ROM in the same folder as the installer executable to have it
-   detected automatically.
-3. Open `mp2recomp-installer` on Linux or `mp2recomp-installer.exe` on Windows.
-   Confirm the detected ROM (or drag your ROM onto the window), choose an
-   installation directory, and press **Go**.
-4. Wait for **Installed. Ready to play.** The installer can launch the game when
-   it finishes. Press **Enter** to skip the opening; use the **arrow keys** to
-   move and **X** or **Space** for A. Press **F1** for settings.
+   `mp2recomp-game-linux-x86_64.tar.gz` or `mp2recomp-game-windows-x86_64.zip`.
+2. Extract the archive into a writable folder. Open `./play` on Linux or
+   `mp2recomp.exe` on Windows.
+3. Select your ROM. The game remembers it for future launches. Press **Enter**
+   to skip the opening, use the **arrow keys** to move and press **X** or
+   **Space** for A. Press **F1** for settings.
 
-The installer includes Python, a compiler, and verified precompiled open-source
-runtime libraries. It generates and compiles game code locally from your ROM,
-then links it with those libraries. The included SDK allows offline installation
-and reduces local build work. No ROM, generated game code, or game assets are
-distributed with this project.
+To upgrade, extract the new package and copy `userdata/` from your previous
+installation to bring over your ROM, saves, and settings. The portable package
+ships the compiled game and runtime libraries. Players supply the ROM separately.
 
-To play again, use the application shortcut, run `./play` from the Linux
-installation directory, or open `mp2recomp.exe` on Windows. To upgrade, run the
-new installer and choose the same installation directory; saves and settings
-are preserved.
-
-See [installation and troubleshooting](docs/installation.md) for terminal commands,
-offline packs, and help with setup. If you want to work on the code, follow
-[building from source](docs/building.md), then launch with `./run.sh`.
+The [v0.2.3 source installer](docs/installation.md) builds the game on the
+player's computer. For development, see [building from source](docs/building.md).
 
 ## Find what you need
 
 | I want to… | Guide |
 | --- | --- |
-| Install, upgrade, or fix setup | [Installation](docs/installation.md) |
+| Play, upgrade, or package the game | [Prebuilt packages](docs/prebuilt-game.md) |
+| Use the source installer | [Source installer](docs/installation.md) |
 | Change controls, sound, or graphics | [Controls and settings](#controls-and-settings) |
 | Play with friends | [Multiplayer](docs/netplay.md) |
 | Find logs, record a problem, or replay a checkpoint | [Debugging](docs/debugging.md) |

@@ -2,7 +2,8 @@
 
 [Back to the README](../README.md) · [Build from source](building.md)
 
-Use the packaged installer for the quickest setup. It includes the tools needed
+This guide covers the v0.2.3 source installer. See [prebuilt game packages](prebuilt-game.md)
+for the current portable downloads. The source installer includes the tools needed
 to build the game from your own ROM. You need a Linux or Windows x86-64 computer,
 a working Vulkan graphics driver, and an unmodified **Mario Party 2 USA ROM**.
 Windows installation and actual game boot still need testing on a Windows computer.
@@ -10,7 +11,7 @@ Windows installation and actual game boot still need testing on a Windows comput
 ## Install in a few steps
 
 1. Download the installer archive for your platform from the
-   [releases page](https://github.com/ajcohn716/mp2Recomp/releases).
+   [v0.2.3 release](https://github.com/ajcohn716/mp2Recomp/releases/tag/v0.2.3).
    Choose `mp2recomp-installer-linux-x86_64.tar.gz` on Linux or
    `mp2recomp-installer-windows-x86_64.zip` on Windows.
 2. Extract the whole archive. Keep its files together, including the compressed
@@ -117,8 +118,9 @@ compositor without falling back to X11.
 ## For release maintainers
 
 The `Installer release` GitHub Actions workflow builds each platform's installer
-and matching dependency pack. Tagged `v*` builds prepare a draft release for
-verification before publication; manual runs also provide Actions artifacts.
+and matching dependency pack. Tags in the v0.1 and v0.2 series prepare a draft
+installer release. Manual runs provide Actions artifacts. Build portable releases
+locally using the [prebuilt package guide](prebuilt-game.md).
 
 For installer-only changes, workflow dispatch can reuse a verified SDK run via
 `sdk_run_id`. Its dependency pins and toolchain recipe must match; leave the field

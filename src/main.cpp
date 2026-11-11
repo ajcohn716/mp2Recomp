@@ -396,7 +396,7 @@ int main(int argc, char** argv) try {
     if (open_settings) settings::toggle();
     register_mp2_overlays();
     recomp::Configuration config{};
-    config.project_version = {0, 2, 2, "alpha"};
+    config.project_version = {0, 3, 0, "alpha"};
 #ifdef _WIN32
     SDL_SysWMinfo wm{};SDL_VERSION(&wm.version);
     if (!SDL_GetWindowWMInfo(window,&wm)) { fprintf(stderr,"%s\n",SDL_GetError());return 1; }

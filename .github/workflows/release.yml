@@ -7,7 +7,7 @@ on:
         type: string
         default: ''
   push:
-    tags: ['v*']
+    tags: ['v0.1', 'v0.1.*', 'v0.2', 'v0.2.*']
 concurrency:
   group: installer-release-${{ github.ref }}
   cancel-in-progress: false
@@ -204,7 +204,7 @@ jobs:
             dist/mp2recomp-installer-*.zip
             dist/mp2recomp-installer-*.sha256
   release:
-    if: always() && github.ref_type == 'tag' && needs.installer.result == 'success'
+    if: always() && github.event_name == 'push' && github.ref_type == 'tag' && needs.installer.result == 'success'
     needs: installer
     runs-on: ubuntu-24.04
     permissions:
