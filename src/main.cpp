@@ -1,6 +1,10 @@
 #include <SDL.h>
 #ifdef _WIN32
 #include <SDL_syswm.h>
+#include <commdlg.h>
+#include <shellapi.h>
+#else
+#include <gtk/gtk.h>
 #endif
 #include "settings.hpp"
 #include "debug.hpp"
@@ -14,6 +18,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <vector>
 #include <optional>
 #include <cerrno>
@@ -32,6 +37,15 @@ extern RspUcodeFunc aspMain;
 std::unique_ptr<ultramodern::renderer::RendererContext> create_mp2_null_renderer(uint8_t*, ultramodern::renderer::WindowHandle, bool);
 
 namespace {
+constexpr auto rom_filename = "Mario Party 2 (USA).z64";
+constexpr auto rom_size = 32 * 1024 * 1024;
+const std::u8string game_id = u8"mp2.us";
+
+std::string utf8_path(const std::filesystem::path& path) {
+    const auto bytes = path.u8string();
+    return {bytes.begin(), bytes.end()};
+}
+
 #ifdef _WIN32
 std::wstring quote_argument(const std::wstring& value) {
     std::wstring result=L"\"";
@@ -45,6 +59,94 @@ std::wstring quote_argument(const std::wstring& value) {
     return result+L'"';
 }
 #endif
+
+std::optional<std::filesystem::path> choose_rom_file() {
+#ifdef _WIN32
+    std::wstring filename(32768, L'\0');
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.lpstrTitle = L"Choose your Mario Party 2 USA ROM";
+    dialog.lpstrFilter = L"Nintendo 64 ROMs (*.z64;*.v64;*.n64)\0*.z64;*.v64;*.n64\0All files\0*.*\0";
+    dialog.lpstrFile = filename.data();
+    dialog.nMaxFile = static_cast<DWORD>(filename.size());
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (GetOpenFileNameW(&dialog)) return std::filesystem::path(filename.c_str());
+    if (CommDlgExtendedError()) throw std::runtime_error("Could not open the ROM picker. Use --rom to select a file.");
+    return std::nullopt;
+#else
+    if (!gtk_init_check(nullptr, nullptr)) {
+        throw std::runtime_error("Could not open the ROM picker. Use --rom to select a file.");
+    }
+    auto* dialog = gtk_file_chooser_native_new("Choose your Mario Party 2 USA ROM", nullptr,
+                                              GTK_FILE_CHOOSER_ACTION_OPEN, "Play", "Cancel");
+    auto* chooser = GTK_FILE_CHOOSER(dialog);
+    auto* filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Nintendo 64 ROMs");
+    for (const auto* pattern : {"*.[zZ]64", "*.[vV]64", "*.[nN]64"}) {
+        gtk_file_filter_add_pattern(filter, pattern);
+    }
+    gtk_file_chooser_add_filter(chooser, filter);
+    std::optional<std::filesystem::path> path;
+    if (gtk_native_dialog_run(GTK_NATIVE_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        if (char* filename = gtk_file_chooser_get_filename(chooser)) {
+            path.emplace(filename);
+            g_free(filename);
+        }
+    }
+    g_object_unref(dialog);
+    return path;
+#endif
+}
+
+std::optional<std::filesystem::path> prepare_rom(const std::filesystem::path& requested,
+                                                 const std::filesystem::path& config_dir,
+                                                 bool allow_picker) {
+    recomp::GameEntry game{
+        .rom_hash = 0xd2dbfb3b4d7a5e81ULL,
+        .internal_name = "MarioParty2",
+        .display_name = "Mario Party 2 (USA)",
+        .game_id = game_id,
+        .mod_game_id = "mp2",
+        .save_type = recomp::SaveType::Eep4k,
+        .is_enabled = true,
+        .entrypoint_address = gpr(int64_t(int32_t(0x80000400))),
+        .entrypoint = mp2_entry,
+        .on_init_callback = mp2_init,
+    };
+    recomp::register_game(game);
+    std::filesystem::create_directories(config_dir);
+    recomp::register_config_path(config_dir);
+    const auto stored = config_dir / game.stored_filename();
+    auto correct_size = [](const std::filesystem::path& path) {
+        std::error_code error;
+        return std::filesystem::file_size(path, error) == rom_size;
+    };
+    auto import = [&](const std::filesystem::path& path) {
+        if (!correct_size(path)) return false;
+        std::error_code error;
+        if (std::filesystem::equivalent(path, stored, error)) return recomp::load_stored_rom(game_id);
+        if (recomp::select_rom(path, game_id) != recomp::RomValidationError::Good) return false;
+        if (!recomp::load_stored_rom(game_id)) {
+            throw std::runtime_error("Could not save the selected ROM. Check that userdata is writable.");
+        }
+        return true;
+    };
+    constexpr auto invalid_rom = "Select an unmodified 32 MiB Mario Party 2 USA ROM (.z64, .v64, or .n64).";
+    if (!requested.empty()) {
+        if (import(requested)) return stored;
+        throw std::runtime_error(invalid_rom);
+    }
+    if ((correct_size(stored) && recomp::load_stored_rom(game_id)) || import(rom_filename)) {
+        return stored;
+    }
+    if (!allow_picker) throw std::runtime_error(invalid_rom);
+    while (auto selected = choose_rom_file()) {
+        if (import(*selected)) return stored;
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Mario Party 2 ROM", invalid_rom, nullptr);
+    }
+    return std::nullopt;
+}
+
 void configure_bundled_runtime() {
 #ifndef _WIN32
     char* base=SDL_GetBasePath();
@@ -148,6 +250,17 @@ RspUcodeFunc* get_ucode(const OSTask* task) {
 }
 
 int main(int argc, char** argv) try {
+#ifdef _WIN32
+    // The CRT's narrow argv can lose characters in ROM and save paths.
+    std::unique_ptr<wchar_t*, decltype(&LocalFree)> wide_argv(CommandLineToArgvW(GetCommandLineW(), &argc), LocalFree);
+    if (!wide_argv) throw std::runtime_error("Could not read command-line arguments.");
+    std::vector<std::string> utf8_arguments;
+    for (int i = 0; i < argc; ++i) utf8_arguments.push_back(utf8_path(wide_argv.get()[i]));
+    std::vector<char*> utf8_argv;
+    for (auto& argument : utf8_arguments) utf8_argv.push_back(argument.data());
+    utf8_argv.push_back(nullptr);
+    argv = utf8_argv.data();
+#endif
     configure_bundled_runtime();
     for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--video-self-test") {
         extern int mp2_video_self_test();return mp2_video_self_test();
@@ -158,6 +271,7 @@ int main(int argc, char** argv) try {
     for(int i=1;i<argc;++i) if(std::string_view(argv[i])=="--self-test") {
         extern int mp2_self_test();return mp2_self_test();
     }
+    const auto launch_directory = std::filesystem::current_path();
 #ifdef _WIN32
     if(char* base=SDL_GetBasePath()) { std::filesystem::current_path(std::filesystem::u8path(base));SDL_free(base); }
 #endif
@@ -168,14 +282,14 @@ int main(int argc, char** argv) try {
     bool debug_controls=false, checkpoints=false;
     std::filesystem::path checkpoint_load;
 
-    std::filesystem::path rom = "Mario Party 2 (USA).z64";
+    std::filesystem::path requested_rom;
     for (int i = 1; i < argc; ++i) {
         auto argument = std::string_view(argv[i]);
         auto value = [&]() -> const char* { if(i+1>=argc) throw std::runtime_error("Missing value for " + std::string(argument)); return argv[++i]; };
         if (argument == "--debug-checkpoints") checkpoints=true;
-        else if (argument == "--debug-load") { checkpoint_load=value(); checkpoints=true; }
+        else if (argument == "--debug-load") { checkpoint_load=std::filesystem::u8path(value()); checkpoints=true; }
         else if (argument == "--debug-controls") debug_controls=true;
-        else if (argument == "--debug-dir") debug_directory=value();
+        else if (argument == "--debug-dir") debug_directory=std::filesystem::u8path(value());
         else if (argument == "--netplay" || argument == "--host") multiplayer = true;
         else if (argument == "--netplay-connect") { multiplayer = true; connect_immediately = true; }
         else if (argument == "--join") { multiplayer = true; network.code = value(); }
@@ -187,21 +301,19 @@ int main(int argc, char** argv) try {
             else throw std::runtime_error("Netplay transport must be steam or direct");
         }
         else if (argument == "--host-port") { auto port = std::stoul(value()); if (port == 0 || port > 65535) throw std::runtime_error("Host port must be 1..65535"); network.port = uint16_t(port); }
-        else if (argument == "--data-dir") data_directory = value();
-        else if (argument == "--netplay-trace") trace = value();
+        else if (argument == "--data-dir") data_directory = std::filesystem::u8path(value());
+        else if (argument == "--netplay-trace") trace = std::filesystem::u8path(value());
         else if (argument == "--netplay-probe") probe = std::stoul(value());
         else if (argument == "--netplay-frames") stop_frame = std::stoul(value());
         else if (argument == "--netplay-auto-start") auto_players = std::stoul(value());
         else if (argument == "--netplay-bot") bot = true;
         else if (argument == "--headless") headless = true;
         else if (std::string_view(argv[i]) == "--settings") open_settings = true;
-        else if (std::string_view(argv[i]) == "--rom" && i+1 < argc) rom = argv[++i];
+        else if (argument == "--rom") requested_rom = launch_directory / std::filesystem::u8path(value());
         else if (std::string_view(argv[i]) == "--frames" && i+1 < argc) quit_after = std::stoul(argv[++i]);
         else if (std::string_view(argv[i]) == "--auto-start" && i+1 < argc) auto_start_at = std::stoul(argv[++i]);
         else throw std::runtime_error("Unknown argument: " + std::string(argument));
     }
-    debug_controls=debug_controls||checkpoints;
-    mp2::debug::initialize(debug_directory.empty()?data_directory/"debug":debug_directory,debug_controls,headless);
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError()); return 1;
@@ -210,6 +322,10 @@ int main(int argc, char** argv) try {
     if (probe && multiplayer) throw std::runtime_error("Use either a local probe or multiplayer");
     if ((probe || multiplayer) && auto_start_at) throw std::runtime_error("Use --netplay-bot for deterministic automated inputs");
     auto config_dir = std::filesystem::absolute(data_directory);
+    const auto rom = prepare_rom(requested_rom, config_dir, !headless && !probe);
+    if (!rom) { SDL_Quit(); return 0; }
+    debug_controls=debug_controls||checkpoints;
+    mp2::debug::initialize(debug_directory.empty()?data_directory/"debug":debug_directory,debug_controls,headless);
     settings::init(config_dir);
     std::unique_ptr<netplay::SteamSocial> steam_social;
     if(!headless&&!probe&&!checkpoints)steam_social=std::make_unique<netplay::SteamSocial>();
@@ -254,6 +370,11 @@ int main(int argc, char** argv) try {
     if (!window) { fprintf(stderr, "%s\n", SDL_GetError()); return 1; }
     if (session) SDL_SetWindowTitle(window, ("Mario Party 2 | Netplay | Player " + std::to_string(session->status().slot + 1)).c_str());
     std::filesystem::create_directories(config_dir);
+    // Netplay and checkpoint runs use separate save directories. Give the
+    // runtime the same validated ROM in that directory as well.
+    if (config_dir != rom->parent_path()) {
+        std::filesystem::copy_file(*rom, config_dir / rom->filename(), std::filesystem::copy_options::overwrite_existing);
+    }
     recomp::register_config_path(config_dir);
     settings::set_game_window(window);
     settings::NetplayActions network_actions;
@@ -274,22 +395,6 @@ int main(int argc, char** argv) try {
     settings::set_netplay(std::move(network_actions),network);
     if (open_settings) settings::toggle();
     register_mp2_overlays();
-    recomp::register_game({
-        .rom_hash = 0xd2dbfb3b4d7a5e81ULL,
-        .internal_name = "MarioParty2",
-        .display_name = "Mario Party 2 (USA)",
-        .game_id = u8"mp2.us",
-        .mod_game_id = "mp2",
-        .save_type = recomp::SaveType::Eep4k,
-        .is_enabled = true,
-        .entrypoint_address = gpr(int64_t(int32_t(0x80000400))),
-        .entrypoint = mp2_entry,
-        .on_init_callback = mp2_init,
-    });
-    auto result = recomp::select_rom(rom, u8"mp2.us");
-    if (result != recomp::RomValidationError::Good) {
-        fprintf(stderr, "ROM validation failed: %d\n", int(result)); return 1;
-    }
     recomp::Configuration config{};
     config.project_version = {0, 2, 2, "alpha"};
 #ifdef _WIN32
@@ -307,7 +412,7 @@ int main(int argc, char** argv) try {
     config.gfx_callbacks.update_gfx = update_gfx;
     config.events_callbacks.vi_callback = vi_callback;
     config.error_handling_callbacks.message_box = message_box;
-    recomp::start_game(u8"mp2.us", "");
+    recomp::start_game(game_id, "");
     recomp::start(config);
     if (audio_device) SDL_CloseAudioDevice(audio_device);
     if (session && netplay::game::failed() && !headless) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Multiplayer session ended", session->status().message.c_str(), window);
@@ -319,24 +424,24 @@ int main(int argc, char** argv) try {
     auto load_state=mp2::checkpoint::requested_load();
     if (requested_room || !load_state.empty()) {
         char* base=SDL_GetBasePath();
-        auto executable=base?std::filesystem::path(base)/std::filesystem::path(argv[0]).filename():std::filesystem::absolute(argv[0]);
+        auto executable=base?std::filesystem::u8path(base)/std::filesystem::u8path(argv[0]).filename():std::filesystem::absolute(std::filesystem::u8path(argv[0]));
         SDL_free(base);
-        std::vector<std::string> arguments{executable.string(),"--rom",std::filesystem::absolute(rom).string(),
-            "--data-dir",std::filesystem::absolute(data_directory).string()};
+        std::vector<std::string> arguments{utf8_path(executable),"--rom",utf8_path(*rom),
+            "--data-dir",utf8_path(std::filesystem::absolute(data_directory))};
         if(requested_room) {
             arguments.insert(arguments.end(),{"--netplay-connect","--host-address",requested_room->address,"--host-port",std::to_string(requested_room->port),"--netplay-transport",requested_room->transport==netplay::Transport::Steam?"steam":"direct"});
             if(!requested_room->code.empty()){arguments.push_back("--join");arguments.push_back(requested_room->code);}
-        } else arguments.insert(arguments.end(),{"--debug-checkpoints","--debug-load",load_state.string()});
+        } else arguments.insert(arguments.end(),{"--debug-checkpoints","--debug-load",utf8_path(load_state)});
         if(headless)arguments.push_back("--headless");
         if(debug_controls)arguments.push_back("--debug-controls");
-        if(!debug_directory.empty()){arguments.push_back("--debug-dir");arguments.push_back(std::filesystem::absolute(debug_directory).string());}
+        if(!debug_directory.empty()){arguments.push_back("--debug-dir");arguments.push_back(utf8_path(std::filesystem::absolute(debug_directory)));}
         if(bot)arguments.push_back("--netplay-bot");
         if(stop_frame){arguments.push_back("--netplay-frames");arguments.push_back(std::to_string(stop_frame));}
         mp2::debug::shutdown();
         SDL_Quit();
 #ifdef _WIN32
         std::wstring command;
-        for(const auto& arg:arguments){if(!command.empty())command+=L' ';command+=quote_argument(std::filesystem::path(arg).wstring());}
+        for(const auto& arg:arguments){if(!command.empty())command+=L' ';command+=quote_argument(std::filesystem::u8path(arg).wstring());}
         STARTUPINFOW startup{};startup.cb=sizeof(startup);
         PROCESS_INFORMATION child{};
         if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&startup,&child))
