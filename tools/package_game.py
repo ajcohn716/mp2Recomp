@@ -140,8 +140,10 @@ def stage_game(args):
         (stage / 'steam.json').unlink(missing_ok=True)
         launcher = 'mp2recomp.exe' if windows else './play'
         (stage / 'README.txt').write_text(
-            f'Mario Party 2 Recompiled\n\nOpen {launcher} and select your own Mario Party 2 USA ROM.\n'
-            'The game accepts .z64, .v64 and .n64 files and stores a local copy.\n'
+            'Mario Party 2 Recompiled\n\n'
+            'For automatic detection, create a games/ folder beside the executable and put your\n'
+            'Mario Party 2 USA ROM inside it. The game accepts .z64, .v64 and .n64 files.\n'
+            f'Open {launcher} and select your ROM if prompted. The game stores a local copy.\n'
             'Keep the files together. Your saves and settings are in userdata/.\n'
             'To upgrade, copy userdata/ from your previous installation.\n', encoding='utf-8')
         list(payload_files(stage, windows))

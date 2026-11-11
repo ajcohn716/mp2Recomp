@@ -4,11 +4,14 @@
 
 ## Play
 
-Extract the archive for your platform into a writable folder. Keep its files
-together and open `mp2recomp.exe` on Windows or `./play` on Linux. Select your
-unmodified 32 MiB Mario Party 2 USA ROM when prompted. The picker accepts
-`.z64`, `.v64`, and `.n64` files. The game validates the dump and keeps a local
-copy in `userdata/mp2.us.z64` for later launches.
+Extract the archive for your platform into a writable folder. To detect your
+ROM automatically, create a `games/` folder beside the executable and put
+your unmodified 32 MiB Mario Party 2 USA ROM directly inside it. The game
+checks `.z64`, `.v64`, and `.n64` files regardless of filename or extension case.
+
+Open `mp2recomp.exe` on Windows or `./play` on Linux. If the game needs a ROM
+and finds none it can use, select one in the picker. The game validates the
+dump and keeps a local copy in `userdata/mp2.us.z64` for later launches.
 
 You can also put `Mario Party 2 (USA).z64` beside the game, or launch with
 `--rom` and an absolute path. The game still needs a Vulkan graphics driver.

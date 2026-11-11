@@ -1,7 +1,7 @@
 # Mario Party 2 Recompiled
 
 [Downloads](https://github.com/ajcohn716/mp2Recomp/releases) ·
-[Release notes](docs/releases/v0.3.0.md) · [GPLv3 or later](LICENSE)
+[Release notes](docs/releases/v0.3.1.md) · [GPLv3 or later](LICENSE)
 
 A native PC recompilation of **Mario Party 2** for Linux and Windows x86-64.
 
@@ -22,10 +22,11 @@ driver** and your own unmodified **Mario Party 2 USA ROM**. The game accepts
 
 1. Open [Releases](https://github.com/ajcohn716/mp2Recomp/releases) and download
    `mp2recomp-game-linux-x86_64.tar.gz` or `mp2recomp-game-windows-x86_64.zip`.
-2. Extract the archive into a writable folder. Open `./play` on Linux or
-   `mp2recomp.exe` on Windows.
-3. Select your ROM. The game remembers it for future launches. Press **Enter**
-   to skip the opening, use the **arrow keys** to move and press **X** or
+2. Extract the archive into a writable folder. For automatic detection, create
+   a `games/` folder beside the game executable and put your ROM inside it.
+3. Open `./play` on Linux or `mp2recomp.exe` on Windows. If prompted, select
+   your ROM. The game remembers it for future launches. Press **Enter** to
+   skip the opening, use the **arrow keys** to move and press **X** or
    **Space** for A. Press **F1** for settings.
 
 To upgrade, extract the new package and copy `userdata/` from your previous

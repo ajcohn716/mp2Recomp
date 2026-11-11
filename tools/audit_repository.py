@@ -25,6 +25,7 @@ ALLOWED = {
     "docs/releases/v0.2.2.md",
     "docs/releases/v0.2.3.md",
     "docs/releases/v0.3.0.md",
+    "docs/releases/v0.3.1.md",
     "docs/steam-helper.md",
     "cmake/Netplay.cmake",
     "cmake/PrebuiltRuntime.cmake",
