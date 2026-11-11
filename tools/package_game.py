@@ -149,15 +149,15 @@ def stage_game(args):
     print('Game staged at ' + str(output))
 
 
-def archive_game(stage, output, *, unsigned_test=False):
+def archive_game(stage, output, *, unsigned_test=False, unsigned_release=False):
     stage, output = stage.resolve(), output.resolve()
     windows = os.name == 'nt'
     if output.is_relative_to(stage):
         raise InstallError('Choose an archive output directory outside the game folder.')
-    if unsigned_test and not windows:
-        raise InstallError('--unsigned-test is only for Windows test builds.')
+    if (unsigned_test or unsigned_release) and not windows:
+        raise InstallError('Unsigned archive options apply to Windows builds only.')
     files = list(payload_files(stage, windows))
-    if windows and not unsigned_test:
+    if windows and not (unsigned_test or unsigned_release):
         verify_binaries(stage)
     output.mkdir(parents=True, exist_ok=True)
     label = 'mp2recomp-game-' + platform_key()
@@ -197,7 +197,9 @@ def main():
     archive = commands.add_parser('archive', help='Archive a staged game and write its SHA-256 checksum')
     archive.add_argument('--stage', type=Path, required=True)
     archive.add_argument('--output', type=Path, required=True)
-    archive.add_argument('--unsigned-test', action='store_true', help='Create a clearly named unsigned Windows test ZIP')
+    signing = archive.add_mutually_exclusive_group()
+    signing.add_argument('--unsigned-test', action='store_true', help='Create a clearly named unsigned Windows test ZIP')
+    signing.add_argument('--unsigned-release', action='store_true', help='Create a Windows release ZIP without signature verification')
     args = parser.parse_args()
     if args.command == 'stage':
         if bool(args.sdk_archive) != bool(args.sdk_metadata):
@@ -206,7 +208,8 @@ def main():
             parser.error('--jobs must be positive')
         stage_game(args)
     else:
-        print(archive_game(args.stage, args.output, unsigned_test=args.unsigned_test))
+        print(archive_game(args.stage, args.output, unsigned_test=args.unsigned_test,
+                           unsigned_release=args.unsigned_release))
 
 
 if __name__ == '__main__':

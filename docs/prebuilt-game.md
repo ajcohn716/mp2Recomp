@@ -63,7 +63,8 @@ python tools/package_game.py archive --stage C:\mp2-game --output C:\Artifacts
 
 The archive command checks the staged payload and writes the archive and its
 `.sha256` file. On Windows it checks embedded signatures before writing the
-release ZIP. Add `--unsigned-test` to build a clearly named ZIP for local
-testing before signing is available. Test an extracted copy so the player's
-ROM and saves go into that copy instead of the staging folder. For the signed
-Windows build, test first launch with Smart App Control enabled.
+release ZIP by default. Use `--unsigned-release` to package an unsigned Windows
+release, or `--unsigned-test` for a ZIP labeled for local testing. Test an
+extracted copy so the player's ROM and saves go into that copy instead of the
+staging folder. For a signed Windows build, test first launch with Smart App
+Control enabled.
