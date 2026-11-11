@@ -98,6 +98,7 @@ See [multiplayer setup](netplay.md).
 | ROM rejected | Use an unmodified 32 MiB USA ROM. The installer accepts all three byte orders; renaming a different ROM will not make it compatible. |
 | Dependency pack missing or rejected | Use the matching SDK from the same release, keep it compressed beside the installer, or select it in advanced options. |
 | Installation fails during compilation | Keep the installer log, retry with fewer compiler jobs, and reuse the same build/cache directory. |
+| Windows reports `No such file or directory` under `mp2recomp-cache/dependencies`, especially for a long shader filename | Use the v0.2.3 or newer installer and its matching SDK. Older installers can exceed Windows' path-length limit when unpacking dependencies. Selecting an offline SDK archive or another build directory does not change the dependency cache location. |
 | Game will not open a graphics window | Check that your graphics driver supports Vulkan. On Linux, the video self-test below can help identify the display backend. |
 | Steam helper missing or damaged | Reinstall using the complete v0.2.2 archive and matching dependency pack. Keep the installed helper and its runtime files together. |
 | Steam initialization fails | Start Steam and sign in under the same OS user as the game, or choose Direct TCP. |
@@ -151,3 +152,13 @@ Version 0.2.2 requires freshly rebuilt SDKs with the protocol-2 Steam helper.
 Do not reuse v0.2.1 SDK artifacts: the game and helper protocol must match.
 The graphical game initializes Steam at launch, so friends playing offline
 can receive invitations without creating their own room.
+
+Version 0.2.3 requires freshly rebuilt SDKs to omit unused SPIRV-Cross shader
+regression inputs and reference outputs. Do not reuse v0.2.2 SDK artifacts.
+SDK extraction, checksum verification, cache publication and source copying use
+extended Windows paths for file operations, without requiring users to enable
+the system long-path policy. Build commands keep ordinary paths for toolchain
+compatibility. The release workflow tests the actual Windows SDK with
+`LongPathsEnabled=0`, including extraction into a long user-cache path and
+copying its sources. This does not remove path limits imposed by external
+compilers or other build tools for arbitrarily deep custom build directories.
