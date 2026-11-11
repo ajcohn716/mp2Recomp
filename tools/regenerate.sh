@@ -10,14 +10,7 @@ mkdir -p build analysis
 if [[ ! -e decomp/baserom.us.z64 ]]; then
     ln -s '../Mario Party 2 (USA).z64' decomp/baserom.us.z64
 fi
-(cd decomp && ../.venv/bin/splat split marioparty2.yaml --disassemble-all) > build/splat.log 2>&1
-.venv/bin/python tools/generate_symbols.py
 cmake -S N64Recomp -B build/recompiler -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/recompiler --target N64RecompCLI RSPRecomp -j "${JOBS:-8}"
-build/recompiler/N64Recomp mp2.toml > build/recompile.log 2>&1
-build/recompiler/RSPRecomp aspMain.toml > build/rsp-recompile.log 2>&1
-if rg -q 'Error recompiling|Error in recompiling' build/recompile.log; then
-    cat build/recompile.log
-    exit 1
-fi
-echo 'CPU and audio microcode regenerated.'
+.venv/bin/python tools/regenerate.py \
+    --recompiler "$PWD/build/recompiler/N64Recomp" --rsp "$PWD/build/recompiler/RSPRecomp"
