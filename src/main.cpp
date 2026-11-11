@@ -9,6 +9,7 @@
 #include "settings.hpp"
 #include "debug.hpp"
 #include "debug_state.hpp"
+#include "guest_memory.hpp"
 #include "netplay_game.hpp"
 #include <cstdlib>
 #include <thread>
@@ -23,6 +24,7 @@
 #include <optional>
 #include <cerrno>
 #include <cstring>
+#include <mutex>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -182,8 +184,8 @@ void configure_bundled_runtime() {
 }
 SDL_Window* window;
 SDL_AudioDeviceID audio_device{};
-std::atomic<uint16_t> buttons{};
-std::atomic<float> stick_x{}, stick_y{};
+std::mutex local_input_mutex;
+settings::Inputs local_inputs, polled_inputs;
 std::atomic<unsigned> vi_count{};
 std::atomic<size_t> last_audio_frames{};
 unsigned quit_after{};
@@ -215,30 +217,49 @@ size_t audio_remaining() {
     // waiting in SDL. Reporting the whole queue can underflow MP2's next size.
     return audio_device ? std::min(size_t(SDL_GetQueuedAudioSize(audio_device) / 4), last_audio_frames.load()) : 0;
 }
+void poll_input() {
+    std::lock_guard lock(local_input_mutex);
+    polled_inputs = local_inputs;
+}
 bool get_input(int port, uint16_t* b, float* x, float* y) {
-    if (netplay::game::active() || mp2::checkpoint::enabled()) return false; // online samples enter at the game latch
-    if (port != 0) return false;
-    *b = buttons.load(); *x = stick_x.load(); *y = stick_y.load();
-    mp2::debug::input(*b,*x,*y);
-    unsigned vi = vi_count.load();
-    if (auto_start_at && vi >= auto_start_at && vi < auto_start_at + 4) *b |= 0x1000;
+    if (port < 0 || port >= int(polled_inputs.size()) || !polled_inputs[port].connected) return false;
+    const auto& input = polled_inputs[port];
+    *b = input.buttons;
+    *x = input.x;
+    *y = input.y;
+    if (port == 0) {
+        mp2::debug::input(*b, *x, *y);
+        unsigned vi = vi_count.load();
+        if (auto_start_at && vi >= auto_start_at && vi < auto_start_at + 4) *b |= 0x1000;
+    }
     return true;
 }
 ultramodern::input::connected_device_info_t connected(int port) {
     using namespace ultramodern::input;
-    return {port >= 0 && port < 4 && (netplay::game::connected_mask() & (1 << port)) ? Device::Controller : Device::None, Pak::None};
+    if (port < 0 || port >= int(local_inputs.size())) return {Device::None, Pak::None};
+    if (netplay::game::active() || mp2::checkpoint::enabled()) {
+        return {(netplay::game::connected_mask() & (1 << port)) ? Device::Controller : Device::None, Pak::None};
+    }
+    std::lock_guard lock(local_input_mutex);
+    return {local_inputs[port].connected ? Device::Controller : Device::None, Pak::None};
 }
-void publish_input(uint16_t b, float x, float y) {
-    buttons.store(b); stick_x = x; stick_y = y;
-    netplay::game::local_input(b,x,y);
-    mp2::checkpoint::local_input(b,x,y);
+void publish_input(const settings::Inputs& inputs) {
+    const auto& primary = inputs.front();
+    if (netplay::game::active()) {
+        netplay::game::local_input(primary.buttons, primary.x, primary.y);
+    } else if (mp2::checkpoint::enabled()) {
+        mp2::checkpoint::local_input(primary.buttons, primary.x, primary.y);
+    } else {
+        std::lock_guard lock(local_input_mutex);
+        local_inputs = inputs;
+    }
 }
 bool confirm_quit() {
     constexpr char title[] = "Quit Mario Party 2?";
     constexpr char prompt[] = "Are you sure you want to quit?";
 
     // The game can keep running while the dialog blocks input polling.
-    publish_input(0, 0, 0);
+    publish_input(settings::read_inputs(false));
 #ifdef _WIN32
     constexpr int quit_button = 1;
     const SDL_MessageBoxButtonData choices[] = {
@@ -292,11 +313,12 @@ void update_gfx(void*) {
         }
     }
     settings::update();
-    auto primary = settings::read_inputs(SDL_GetKeyboardFocus() != nullptr).front();
-    auto b = primary.buttons;
-    auto x = primary.x, y = primary.y;
-    if(mp2::checkpoint::enabled()&&auto_start_at&&vi_count>=auto_start_at&&vi_count<auto_start_at+4)b|=0x1000;
-    publish_input(b, x, y);
+    auto inputs = settings::read_inputs(SDL_GetKeyboardFocus() != nullptr);
+    if (mp2::checkpoint::enabled()) {
+        unsigned vi = vi_count.load();
+        if (auto_start_at && vi >= auto_start_at && vi < auto_start_at + 4) inputs.front().buttons |= 0x1000;
+    }
+    publish_input(inputs);
 }
 void vi_callback() {
     unsigned count = ++vi_count;
@@ -310,6 +332,23 @@ RspUcodeFunc* get_ucode(const OSTask* task) {
     fprintf(stderr, "[MP2] unknown RSP task: %u\n", task->t.type);
     return nullptr;
 }
+}
+
+extern "C" void mp2_read_local_pads(uint8_t* rdram, recomp_context* ctx) {
+    std::array<OSContPad, settings::Inputs{}.size()> pads{};
+    osContGetReadData(pads.data());
+    int16_t last_port = 0;
+    for (size_t port = 0; port < pads.size(); ++port) {
+        const auto& pad = pads[port];
+        MEM_H(6 * port, ctx->r4) = pad.button;
+        MEM_B(6 * port + 2, ctx->r4) = pad.stick_x;
+        MEM_B(6 * port + 3, ctx->r4) = pad.stick_y;
+        MEM_B(6 * port + 4, ctx->r4) = pad.err_no;
+        if (pad.err_no == 0) last_port = int16_t(port + 1);
+    }
+    // MP2's menus use a port count cached at boot. Include any gap so that
+    // unplugging a lower-numbered controller preserves the other player ports.
+    MEM_H(0, 0x800FD868) = last_port;
 }
 
 int main(int argc, char** argv) try {
@@ -394,6 +433,7 @@ int main(int argc, char** argv) try {
     debug_controls=debug_controls||checkpoints;
     mp2::debug::initialize(debug_directory.empty()?data_directory/"debug":debug_directory,debug_controls,headless);
     settings::init(config_dir);
+    local_inputs = settings::read_inputs(false);
     std::unique_ptr<netplay::SteamSocial> steam_social;
     if(!headless&&!probe&&!checkpoints)steam_social=std::make_unique<netplay::SteamSocial>();
     std::unique_ptr<netplay::Session> session;
@@ -474,6 +514,7 @@ int main(int argc, char** argv) try {
     config.rsp_callbacks.get_rsp_microcode = get_ucode;
     config.renderer_callbacks.create_render_context = headless ? create_mp2_null_renderer : create_mp2_renderer;
     config.audio_callbacks = {queue_audio, audio_remaining, set_frequency};
+    config.input_callbacks.poll_input = poll_input;
     config.input_callbacks.get_input = get_input;
     config.input_callbacks.get_connected_device_info = connected;
     config.gfx_callbacks.update_gfx = update_gfx;

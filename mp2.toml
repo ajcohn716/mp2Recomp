@@ -26,3 +26,16 @@ text = "extern int mp2_netplay_active(void); if (mp2_netplay_active()) return;"
 [[patches.hook]]
 func = "func_80016F54_17B54"
 text = "extern void mp2_netplay_latch(uint8_t*, recomp_context*); mp2_netplay_latch(rdram, ctx);"
+
+# Use the game's normal offline pad queue and write disconnected pad states
+# alongside connected ones. The instruction following the original call
+# still sets the destination pointer before the replacement runs.
+[[patches.instruction]]
+func = "func_80016A44_17644"
+vram = 0x80016AC0
+value = 0
+
+[[patches.hook]]
+func = "func_80016A44_17644"
+before_vram = 0x80016AC8
+text = "extern void mp2_read_local_pads(uint8_t*, recomp_context*); mp2_read_local_pads(rdram, ctx);"

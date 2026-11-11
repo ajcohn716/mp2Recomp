@@ -67,10 +67,10 @@ Press **F1** for settings. From a source checkout, you can also launch with
 `./run.sh --settings`. Escape or **Done** closes settings. The game keeps running
 while settings are open, but game input is suppressed.
 
-- **Input:** select an SDL-compatible controller or keyboard-only input, change
-  the left-stick deadzone, and remap bindings. Click a binding and press its new
-  input; Escape cancels. Controllers can be plugged in during play. Arrow keys
-  always control the analog stick.
+- **Input:** choose Player 1's SDL-compatible controller or **Keyboard only**.
+  Change the shared controller bindings and left-stick deadzone, or remap the
+  Player 1 keyboard bindings. Click a binding and press its new input. Escape
+  cancels rebinding. Arrow keys always control Player 1's analog stick.
 - **Audio:** adjust master volume, left/right levels, or mute.
 - **Graphics:** change render resolution (original, 2x–4x, or fit window), aspect
   ratio (4:3, 16:9, or fit window), fullscreen, and output filtering while playing.
@@ -79,10 +79,17 @@ while settings are open, but game input is suppressed.
   leave the session. See [multiplayer setup](docs/netplay.md).
 
 Settings save automatically in `userdata/settings.cfg`. **Reset defaults**
-restores the current Input, Audio, or Graphics page. Offline play uses controller
-port 1. The runtime's ROM copy and saves live in `userdata/`; the offline EEPROM
-save is `userdata/saves/mp2.us.bin`. Back up `userdata/` to keep a copy of your
-settings and progress.
+restores the current Input, Audio, or Graphics page. The runtime's ROM copy and
+saves live in `userdata/`. The offline EEPROM save is `userdata/saves/mp2.us.bin`.
+Back up `userdata/` to keep a copy of your settings and progress.
+
+## Play together on one computer
+
+Launch the game normally and connect up to four SDL-compatible controllers.
+Player 1 can also use the keyboard. Additional controllers fill available
+Player 2–4 ports automatically. Check the assignments in **F1 → Input**, then
+choose your human players in the game's setup menus. You can connect controllers
+during play. When a controller disconnects, the other players keep their ports.
 
 ## Play with friends (experimental)
 
