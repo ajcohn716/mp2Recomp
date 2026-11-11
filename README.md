@@ -4,6 +4,10 @@
 [Release notes](docs/releases/v0.2.3.md) · [GPLv3 or later](LICENSE)
 
 A native PC recompilation of **Mario Party 2** for Linux and Windows x86-64.
+
+[Prebuilt game packages](docs/prebuilt-game.md) can be played by opening the
+game and selecting your ROM. The guide also covers building a portable package
+on a release machine.
 The US game boots through the logos and animated opening to the title screen.
 Game CPU code runs natively, with RT64 for graphics and N64ModernRuntime for
 system services.

@@ -125,7 +125,7 @@ def install_linux_runtime_data(sdk,prefix):
 </fontconfig>
 ''')
 
-def install_runtime_libraries(sdk,source,prefix):
+def install_runtime_libraries(sdk,source,prefix,*,portable=False):
     sdk=Path(sdk);source=Path(source);prefix=Path(prefix)
     library_dir=prefix if os.name=='nt' else prefix/'lib'
     library_dir.mkdir(parents=True,exist_ok=True)
@@ -141,13 +141,17 @@ def install_runtime_libraries(sdk,source,prefix):
             if plugins.is_dir():shutil.copytree(plugins,library_dir/subdir,dirs_exist_ok=True)
     pattern='*.dll' if os.name=='nt' else '*.so*'
     search=[sdk/'toolchain'/('bin' if os.name=='nt' else 'lib'),source/'rt64/src/contrib/dxc'/('bin/x64' if os.name=='nt' else 'lib/x64')]
-    if os.name=='nt':search+=[sdk/'python']
+    if os.name=='nt' and not portable:search+=[sdk/'python']
     for directory in search:
         for library in directory.glob(pattern):
             # The Vulkan loader and GPU-driver support libraries belong
             # to the player's installed graphics stack.
             graphics=('libvulkan','libdrm','libgbm','libGL','libEGL','libglapi')
             if os.name!='nt' and library.name.startswith(graphics):continue
+            # The portable game has no Python or compiler entry points. Keep
+            # SDL's dynamically loaded display/audio libraries in the bundle.
+            build_only=('libllvm','libclang','libpython','liblto','liblld','libcppdap')
+            if portable and library.name.lower().startswith(build_only):continue
             if library.is_file():shutil.copy2(library,library_dir/library.name)
 
 class Installer:
@@ -209,7 +213,7 @@ class Installer:
         self.check_cancelled()
         if result: raise InstallError(f'Command failed (exit {result}). See the installation log.')
 
-    def install(self, rom, prefix, build_dir=None, jobs=4, desktop=True, dependency_pack=None, sdk_dir=None, source_build=False):
+    def install(self, rom, prefix, build_dir=None, jobs=4, desktop=True, dependency_pack=None, sdk_dir=None, source_build=False, *, portable=False):
         self.status('Validating ROM')
         data = validate_rom(rom)
         self.check_cancelled()
@@ -306,20 +310,23 @@ class Installer:
             if sdk and os.name!='nt':
                 self.run([tool('patchelf'),'--set-rpath','$ORIGIN/lib',str(source/'build/native'/binary)],source,env)
             put(binary,copy_from=source/'build/native'/binary,executable=True)
-            put(ROM_NAME,contents=data)
+            if not portable:
+                put(ROM_NAME,contents=data)
             if sdk:
                 self.status('Installing runtime libraries')
-                install_runtime_libraries(sdk,source,prefix)
+                install_runtime_libraries(sdk,source,prefix,portable=portable)
             for library in crt_files:shutil.copy2(library,prefix/library.name)
             if os.name=='nt':
                 # The executable locates ROM/userdata beside itself, even when
                 # launched through Explorer with a different working directory.
                 launcher_path=prefix/binary
             else:
-                launcher='#!/bin/sh\nset -eu\ncd -- '+shlex.quote(str(prefix))+'\nexport LD_LIBRARY_PATH="$PWD/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec ./mp2recomp "$@"\n'
+                directory = '"$(dirname -- "$0")"' if portable else shlex.quote(str(prefix))
+                launcher='#!/bin/sh\nset -eu\ncd -- '+directory+'\nexport LD_LIBRARY_PATH="$PWD/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec ./mp2recomp "$@"\n'
                 put('play',contents=launcher.encode(),executable=True)
                 launcher_path=prefix/'play'
-            put('install.json',contents=(json.dumps({'source_digest':digest,'rom_sha1':ROM_SHA1,'build_directory':str(build_dir)},indent=2)+'\n').encode())
+            if not portable:
+                put('install.json',contents=(json.dumps({'source_digest':digest,'rom_sha1':ROM_SHA1,'build_directory':str(build_dir)},indent=2)+'\n').encode())
             if desktop and os.name=='nt':
                 desktop_dir=Path(os.environ.get('APPDATA',Path.home()/'AppData/Roaming'))/'Microsoft/Windows/Start Menu/Programs'
                 desktop_dir.mkdir(parents=True,exist_ok=True)
