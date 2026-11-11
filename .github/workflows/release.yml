@@ -31,6 +31,19 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
+      - name: Check Windows SDK path regression before building
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+          $previous = Get-ItemPropertyValue -Path $key -Name LongPathsEnabled
+          try {
+            Set-ItemProperty -Path $key -Name LongPathsEnabled -Value 0
+            python -m unittest discover -s tests -p test_sdk_files.py -v
+            if ($LASTEXITCODE -ne 0) { throw 'SDK path regression checks failed' }
+          } finally {
+            Set-ItemProperty -Path $key -Name LongPathsEnabled -Value $previous
+          }
       - name: Bootstrap source dependencies (no ROM)
         run: |
           python tools/audit_repository.py
