@@ -20,7 +20,7 @@ unsigned probe{}, stop{};
 bool bot{};
 std::atomic<bool> error{}, cancelled{};
 std::atomic<uint64_t> frame{};
-std::mutex input_mutex;
+std::mutex input_mutex, latch_mutex;
 Pad input;
 std::ofstream trace;
 uint64_t state_checksum(uint8_t* rdram) {
@@ -53,7 +53,14 @@ void local_input(uint16_t buttons,float x,float y) {
 }
 uint64_t checksum(uint8_t* rdram){return state_checksum(rdram);}
 bool active(){return session || probe;}
-void cancel(){mp2::checkpoint::cancel();cancelled=true;if(session)session->close();}
+void cancel() {
+    mp2::checkpoint::cancel();
+    cancelled = true;
+    if (session) session->close();
+    // Closing the session wakes a pending exchange. Let the latch finish
+    // before the caller starts tearing down guest memory.
+    std::lock_guard lock(latch_mutex);
+}
 bool failed(){return error.load();}
 uint8_t connected_mask(){return session?session->connected_mask():probe?15:1;}
 void initialize(uint8_t* rdram){if(active())MEM_W(0,0x800C99B4)=session?session->seed():0x4D503232;}
@@ -64,12 +71,15 @@ extern "C" void mp2_netplay_latch(uint8_t* rdram,recomp_context*) {
     using namespace netplay::game;
     if(mp2::checkpoint::enabled()){mp2::checkpoint::latch(rdram);return;}
     if(!active())return;
+    std::lock_guard lock(latch_mutex);
+    if (cancelled) return;
     uint64_t f=frame.load();
     try {
         auto checksum=state_checksum(rdram);
         Pads pads{};
         if(session)pads=session->exchange(sample(f,session->status().slot),checksum);
         else for(int p=0;p<4;++p)pads[p]=sample(f,p);
+        if (cancelled) return;
         if(trace){trace<<f<<' '<<std::hex<<checksum<<' '<<uint32_t(MEM_W(0,0x800C99B4))<<std::dec;
             for(auto p:pads)trace<<' '<<p.buttons<<' '<<int(p.x)<<' '<<int(p.y);
             trace<<'\n';trace.flush();}
@@ -85,9 +95,15 @@ extern "C" void mp2_netplay_latch(uint8_t* rdram,recomp_context*) {
         }
         frame=f+1;
         if(f%300==0)fprintf(stderr,"[NETPLAY] simulation frame %llu, state %016llx\n",(unsigned long long)f,(unsigned long long)checksum);
-        if((probe && frame>=probe)||(stop && frame>=stop))ultramodern::quit();
+        if ((probe && frame >= probe) || (stop && frame >= stop)) {
+            cancelled = true;
+            ultramodern::quit();
+        }
     } catch(const std::exception& e) {
-        if(!cancelled){fprintf(stderr,"[NETPLAY] %s\n",e.what());error=true;}
+        if (!cancelled.exchange(true)) {
+            fprintf(stderr, "[NETPLAY] %s\n", e.what());
+            error = true;
+        }
         ultramodern::quit();
     }
 }
