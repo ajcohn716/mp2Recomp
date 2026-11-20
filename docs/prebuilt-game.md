@@ -71,3 +71,11 @@ release, or `--unsigned-test` for a ZIP labeled for local testing. Test an
 extracted copy so the player's ROM and saves go into that copy instead of the
 staging folder. For a signed Windows build, test first launch with Smart App
 Control enabled.
+
+Before publishing, check the build IDs in the two final archives from the same
+source revision:
+
+```sh
+python tools/verify_game_netplay.py \
+  mp2recomp-game-linux-x86_64.tar.gz mp2recomp-game-windows-x86_64.zip
+```
